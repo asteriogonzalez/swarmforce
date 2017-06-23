@@ -1,0 +1,8 @@
+*.pyc
+htmlcov
+*/htmlcov
+.testmondata
+.coverage*
+.cache
+*.wpu
+
