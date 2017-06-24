@@ -2,50 +2,31 @@
 import re
 import types
 import hashlib
+import time
 from io import StringIO
 from random import choice
 from swarmforce.misc import random_path, random_token
 
-class HTTPMessage(dict):
+
+
+
+class Event(dict):
     """Parse HTTP messages and store info in a dict
     like object."""
-    _rexp = re.compile(r"(?P<name>.*?): (?P<value>.*)", re.DOTALL | re.I | re.M)
 
     def __init__(self, *args, **kw):
         self['body'] = u''
+        if 'X-Time' not in kw:
+            kw['X-Time'] = str(time.time())
         dict.__init__(self, *args, **kw)
 
-    def parse(self, stream):
-        """Parse HTTP message from stream."""
-        if isinstance(stream, types.StringTypes):
-            stream = StringIO(unicode(stream))
-
-        cmd = stream.readline().strip()
-        self['method'], self['path'], self['http-version'] = cmd.split()
-        line = stream.readline().strip()
-        while line:
-            match = self._rexp.match(line)
-            if match:
-                data = match.groups()
-                self[data[0]] = data[1]
-            else:
-                raise RuntimeError('Error parsing HTTP header: %s' % line)
-
-            line = stream.readline().strip()
-
-        self['body'] = body = stream.read()
-        length = int(self.get('Content-Length', 0))
-
-        assert not length or len(body) == length
 
     def dump(self, exclude_headers=None):
         """Dump HTTP message into a Stream"""
         lines = []
         lines.append("%(method)s %(path)s %(http-version)s" % self)
 
-        excluded = ['method', 'path', 'http-version', 'body']
-
-        excluded = set(excluded)
+        excluded = set(['method', 'path', 'http-version', 'body'])
         if exclude_headers:
             excluded.difference_update(exclude_headers)
 
@@ -75,6 +56,13 @@ class HTTPMessage(dict):
         self['X-Hash'] = hash_
         return hash_
 
+    @property
+    def key(self):
+        return (self.method, self['X-Time'], self.path, self.get('X-NewPath'))
+
+    @property
+    def statusline(self):
+        return '%(method)s %(path)s' % self
 
 
     def __getattr__(self, key):
@@ -84,6 +72,60 @@ class HTTPMessage(dict):
 
     def __setattr__(self, key, value):
         self[key] = value
+
+
+
+class Request(Event):
+    pass
+
+
+class Response(Event):
+    pass
+
+
+RE_HEADER = re.compile(r"(?P<name>.*?): (?P<value>.*)",
+                       re.DOTALL | re.I)
+
+RE_REQ = re.compile(r"(?P<method>\S+)\s+(?P<path>\S+)\s+(?P<http_version>HTTP\/.+)$", re.DOTALL | re.I)
+RE_RES = re.compile(r"(?P<http_version>HTTP\/\S+)\s+(?P<code>\S+)\s+(?P<result>.*)$", re.DOTALL | re.I)
+
+PARSE_MAP = dict()
+PARSE_MAP[RE_REQ] = Request
+PARSE_MAP[RE_RES] = Response
+
+def parse(stream):
+    """Parse HTTP message from stream."""
+    if isinstance(stream, types.StringTypes):
+        stream = StringIO(unicode(stream))
+
+    statusline = stream.readline().strip()
+    for _re, klass in PARSE_MAP.items():
+        match = _re.match(statusline)
+        if match:
+            match = match.groupdict()
+            match['http-version'] = match.pop('http_version')
+            msg = klass(**match)
+            break
+    else:
+        raise RuntimeError('Unknown message type: %s' % statusline)
+
+    line = stream.readline().strip()
+    while line:
+        match = RE_HEADER.match(line)
+        if match:
+            data = match.groups()
+            msg[data[0]] = data[1]
+        else:
+            raise RuntimeError('Error parsing HTTP header: %s' % line)
+
+        line = stream.readline().strip()
+
+    msg['body'] = body = stream.read()
+    length = int(msg.get('Content-Length', 0))
+
+    print "LENGHT:", length, len(body)
+    assert not length or len(body) == length
+    return msg
 
 
 

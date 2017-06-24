@@ -7,7 +7,7 @@ foo = 1
 def test_foo():
     "A simple function"
     parser = Foo()
-
     parser.bar()
+
 
 # End

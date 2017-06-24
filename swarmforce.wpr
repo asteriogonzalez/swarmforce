@@ -17,17 +17,7 @@ proj.file-list = [loc('foo.py'),
                   loc('pytest.ini'),
                   loc('setup.cfg'),
                   loc('setup.py'),
-                  loc('../tensorflow_tests/flowmonitor.py'),
-                  loc('../tensorflow_tests/main.py'),
-                  loc('../tensorflow_tests/MNIST_vectorize.py'),
-                  loc('../tensorflow_tests/search.txt'),
-                  loc('../tensorflow_tests/search_from_file.py'),
-                  loc('../tensorflow_tests/setup.cfg'),
-                  loc('../tensorflow_tests/test.ini'),
-                  loc('../tensorflow_tests/tf_basic_fit.py'),
-                  loc('../tensorflow_tests/tf_mandelbrot.py'),
-                  loc('../tensorflow_tests/tf_partial_derivates.py'),
-                  loc('../tensorflow_tests/tf_summaries.py')]
+                  loc('swarm.py')]
 proj.file-type = 'shared'
 proj.launch-config = {loc('../flowmonitor/flowmonitor.py'): ('project',
         (u'pelican  ~/Documents/tpom .md sync ~/Documents/tpom .md',
