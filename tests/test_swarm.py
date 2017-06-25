@@ -14,13 +14,19 @@ log = getLogger('swarmforce')
 class Boss(Worker):
     "A client agent"
 
-    def dispatch_response(self, response, request):
+    def __init__(self):
+        Worker.__init__(self)
+        self.add_response_handler('2\d\d$', self.response_OK)
+
+    def response_OK(self, response):
+        request = response.request
         log.info('%s ---> %s', request.body, response.body)
         self.response = response.body
 
 
 class Calc(Worker):
     "A server agent"
+
 
     def dispatch_request(self, event):
         result = eval(event.body)

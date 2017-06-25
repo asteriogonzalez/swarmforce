@@ -16,7 +16,7 @@ MAX_HASH = int('f' * 40, 16)
 
 # TODO: create a cache table for most of numbers
 # DONE: Use DEFINES for http headers
-# TODO: callback requests based on regexp
+# DONE: callback requests based on regexp
 # TODO: trace requests / responses tree across hosts
 # TODO: asyncronous complex tree algoritms (data flow process)
 # TODO: draw request complex executions
@@ -156,8 +156,9 @@ class World(Thread):
             log.debug('%s Found associated request: %s',
                       self, event[X_REQ_ID])
 
+            event.request = request
             worker = self.workers.get(event[X_CLIENT])
-            worker.dispatch_response(event, request)
+            worker.dispatch_response(event)
 
 class Worker(object):
     """A treaded worker that process request and responses from a queue
@@ -171,16 +172,22 @@ class Worker(object):
         self.rules = list()
         self.regexp = re.compile('invalid^.{1000,}$')
 
+        self.response_callbacks = list()
+
         log.info('New Worker at: %s', self)
 
     def dispatch_request(self, event):
         "Process the event. Must be overriden."
         log.warn('Must be overriden: %s', event.dump())
 
-    def dispatch_response(self, response, request):
+    def dispatch_response(self, event):
         "Process a response. Must be overriden."
-        log.warn('ATTENDIND RESPONSE: %s from %s', response, request)
-
+        log.warn('ATTENDIND RESPONSE: %s from %s', event, event.request)
+        code = event.code
+        for regxp, func in self.response_callbacks:
+            if regxp.match(code):
+                log.warn('--> %s', func)
+                func(event)
 
     def send(self, event):
         "Send an event to the world"
@@ -210,6 +217,18 @@ class Worker(object):
         allrules = u'|'.join(['(%s)' % s for s in self.rules])
         self.regexp = re.compile(allrules,
                                  re.DOTALL | re.I | re.UNICODE)
+
+    # response handlers
+    def add_response_handler(self, regexp, func):
+        self.response_callbacks.append(
+            (re.compile(regexp, re.I | re.DOTALL), func))
+
+    def response_OK(self, respone, request):
+        pass
+
+    def response_ERROR(self, respone, request):
+        pass
+
 
 
 # End
