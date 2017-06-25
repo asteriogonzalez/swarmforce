@@ -1,7 +1,7 @@
 """Test HTTP message parsing module"""
 import types
 from io import StringIO
-from swarmforce.http import Event, populate, parse, Request, Response
+from swarmforce.http import Event, populate, parse, Request, Response, X_HASH
 
 
 def test_init():
@@ -113,7 +113,7 @@ def test_hash():
 
     msg1.hash()
 
-    assert len(msg1['X-Hash']) == 40
+    assert len(msg1[X_HASH]) == 40
 
 
 def test_key():

@@ -2,7 +2,7 @@
 import time
 import hashlib
 import pytest
-from swarmforce.swarm import World, Observer, Worker, \
+from swarmforce.swarm import World, Worker, \
      MAX_HASH, hash_range, RUNNING, PAUSED
 from swarmforce.http import Event, Request, Response
 from swarmforce.misc import until
@@ -30,12 +30,16 @@ class Calc(Worker):
 
 
 @pytest.fixture(scope="function")
-def world():
+def world(request):
     "Provide a world that is not shared across all tests"
     world = World()
+    world.start()
 
-    yield world
-    world.close()
+    def fin():
+        world.stop()
+
+    request.addfinalizer(fin)
+    return world
 
 
 def test_hash_reallocation():
@@ -59,11 +63,11 @@ def test_swarm_init(world):
 
     worker = world.new(Worker)
 
-    worker.observer.listen('NEW|UPDATE /inbox')
-    worker.observer.listen('UPDATE /done')
-    worker.observer.listen('.* /workers')
+    worker.listen('NEW|UPDATE /inbox')
+    worker.listen('UPDATE /done')
+    worker.listen('.* /workers')
 
-    worker.set(PAUSED)
+    world.set(PAUSED)
 
     # match
     event = Request()
@@ -86,10 +90,10 @@ def test_swarm_init(world):
     event.body = 'Hello World'
     world.push(event)
 
-    assert len(worker.queue) == 2
-    worker.set(RUNNING)
-    until('len(worker.queue) == 0')
-    assert len(worker.queue) == 0
+    assert len(world.queue) == 3
+    world.set(RUNNING)
+    until('len(world.queue) == 0')
+    assert len(world.queue) == 0
 
 
 def test_swarm_calc(world):
@@ -97,9 +101,7 @@ def test_swarm_calc(world):
 
     client = world.new(Boss)
     worker = world.new(Calc)
-    worker.observer.listen('DO /inbox/calc')
-
-    until('client.running > 0')
+    worker.listen('DO /inbox/calc')
 
     # match
     req = client.new_request()
@@ -107,6 +109,8 @@ def test_swarm_calc(world):
     req.path = '/inbox/calc'
     req.body = '1 + 2'
     client.send(req)
+
+    time.sleep(1)
 
     until("client.response == '3'")
 
