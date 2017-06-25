@@ -13,18 +13,19 @@ log = getLogger('swarmforce')
 
 def until(condition, timeout=5):
     "Wait until condition is true"
-    f = sys._getframe().f_back
-    t1 = time.time() + timeout
-    while time.time() < t1:
-        r = eval(condition, f.f_globals, f.f_locals)
-        log.info('%s ==> %s' % (condition, r))
-        if r:
+    frame = sys._getframe().f_back
+    end = time.time() + timeout
+    while time.time() < end:
+        result = eval(condition, frame.f_globals, frame.f_locals)
+        log.info('(%s) ==> %s', condition, result)
+        if result:
             break
         time.sleep(0.1)
 
 
 @pytest.fixture(scope="module")
 def world():
+    "Provide a world that is not shared across all tests"
     world = World()
 
     yield world
@@ -48,6 +49,7 @@ def test_hash_reallocation():
 
 
 def test_swarm_init(world):
+    "Simple test for creating a worker that listen to some events"
 
     worker = world.new(Worker)
 
@@ -82,8 +84,6 @@ def test_swarm_init(world):
     assert len(worker.queue) == 2
     until('len(worker.queue) == 0')
     assert len(worker.queue) == 0
-    a = 2
-    print "END "* 10
 
 
 # End
