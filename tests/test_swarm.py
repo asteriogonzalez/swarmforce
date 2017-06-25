@@ -1,11 +1,26 @@
 """Test swarm abtraction module"""
-
+import sys
 import time
 import hashlib
 import pytest
 from swarmforce.swarm import World, Observer, Worker, \
-     MAX_HASH, hash_range
+     MAX_HASH, hash_range, RUNNING, PAUSED
 from swarmforce.http import Event
+
+from swarmforce.loggers import getLogger
+
+log = getLogger('swarmforce')
+
+def until(condition, timeout=5):
+    "Wait until condition is true"
+    f = sys._getframe().f_back
+    t1 = time.time() + timeout
+    while time.time() < t1:
+        r = eval(condition, f.f_globals, f.f_locals)
+        log.info('%s ==> %s' % (condition, r))
+        if r:
+            break
+        time.sleep(0.1)
 
 
 @pytest.fixture(scope="module")
@@ -34,12 +49,13 @@ def test_hash_reallocation():
 
 def test_swarm_init(world):
 
-    worker = Worker()
-    observer = Observer(world, worker)
+    worker = world.new(Worker)
 
-    observer.listen('NEW|UPDATE /inbox')
-    observer.listen('UPDATE /done')
-    observer.listen('.* /workers')
+    worker.observer.listen('NEW|UPDATE /inbox')
+    worker.observer.listen('UPDATE /done')
+    worker.observer.listen('.* /workers')
+
+    worker.set(RUNNING)
 
     # match
     event = Event()
@@ -62,18 +78,9 @@ def test_swarm_init(world):
     event.body = 'Hello World'
     world.push(event)
 
+    worker.set(RUNNING)
     assert len(worker.queue) == 2
-
-    worker.start()
-
-    for _ in range(10):
-        if worker.queue:
-            time.sleep(0.1)
-        else:
-            break
-
-    worker.stop()
-
+    until('len(worker.queue) == 0')
     assert len(worker.queue) == 0
     a = 2
     print "END "* 10
