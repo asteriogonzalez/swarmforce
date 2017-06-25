@@ -11,6 +11,7 @@ log = getLogger('swarmforce')
 
 CODE_OK = '200'
 
+
 class Event(dict):
     """Parse HTTP messages and store info in a dict
     like object."""
@@ -24,7 +25,6 @@ class Event(dict):
         if 'X-Time' not in kw:
             kw['X-Time'] = str(time.time())
         dict.__init__(self, *args, **kw)
-
 
     def dump(self, exclude_headers=None, lines=None):
         """Dump HTTP message into a Stream"""
@@ -98,7 +98,6 @@ class Event(dict):
         self[key] = value
 
 
-
 class Request(Event):
     """A request HTTP style class."""
     copy_keys = ['http-version', 'X-Client']
@@ -110,14 +109,13 @@ class Request(Event):
         log.info('Creating response for %s', self.dump())
         msg = Response(code=code, result=result)
         for key in self.copy_keys:
-            if self.has_key(key):
+            if key in self:
                 msg[key] = self[key]
 
         msg['X-Request-Id'] = self['X-Hash']
 
         self.__dict__['response'] = msg
         return msg
-
 
     @property
     def key(self):
@@ -147,6 +145,7 @@ RE_RES = re.compile(r"(?P<http_version>HTTP\/\S+)\s+(?P<code>\S+)\s+(?P<result>.
 PARSE_MAP = dict()
 PARSE_MAP[RE_REQ] = Request
 PARSE_MAP[RE_RES] = Response
+
 
 def parse(stream):
     """Parse HTTP message from stream."""
@@ -181,7 +180,6 @@ def parse(stream):
     assert not length or len(body) == length
 
     return msg
-
 
 
 def populate(msg):

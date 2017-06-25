@@ -1,12 +1,15 @@
+"""Some convenience functions"""
+
 import os
 import hashlib
 
 import sys
 import time
 from random import choice, randint
-alphabet='ABCDEFGHIJKLMNOPQRSTUVWYZ0123456789_'
+alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWYZ0123456789_'
 
 def random_token(length=10, minimum=3):
+    "Generate a random token"
     token = []
     for i in range(minimum, randint(minimum + 1, length + 1)):
         token.append(choice(alphabet))
@@ -14,6 +17,7 @@ def random_token(length=10, minimum=3):
     return ''.join(token)
 
 def random_path(length=10, minimum=3, sep='/', lead=True):
+    "Generate a random PATH"
     if lead:
         path = ['']
     else:

@@ -116,18 +116,19 @@ class Observer(object):
         elif isinstance(event, Response):
             # log.warn('Atending response: %s', event.dump())
             if event['X-Client'] == self.worker.hash_:
-                log.warn('%s ACCEPTING RESPONSE %s', self.worker, event.dump())
-                log.warn(self.pending.keys())
-
+                log.debug('%s ACCEPTING RESPONSE %s',
+                          self.worker, event.dump())
                 request = self.pending.pop(event['X-Request-Id'], None)
                 if request is None:
-                    log.error('%s Can not find associated resquest %s', self.worker, event.dump())
-                    log.error(self.pending)
+                    log.warn('%s Can not find associated resquest %s',
+                             self.worker, event.dump())
+                    log.warn(self.pending.keys())
                 else:
-                    log.info('%s Found associated request: %s', self.worker, event['X-Request-Id'])
+                    log.debug('%s Found associated request: %s',
+                              self.worker, event['X-Request-Id'])
                     self.queue.append((event, request))
             else:
-                log.warn('%s SKIPING RESPONSE %s', self.worker, event)
+                log.warn('%s IGNORING RESPONSE %s', self.worker, event)
         else:
             log.error('%s SKIPING UNKNOWN event %s', self.worker, event)
 
@@ -140,6 +141,9 @@ class Observer(object):
 
 
 class Worker(Thread):
+    """A treaded worker that process request and responses from a queue
+    managed by an observer which connect the worker to the world.
+    """
     def __init__(self, group=None, target=None, name=None,
                  args=(), kwargs=None, verbose=None):
 
@@ -148,7 +152,7 @@ class Worker(Thread):
 
         self.hash_ = hasher(unicode(id(self)))
         self.observer = None
-        self.queue = None # shared with observer
+        self.queue = None  # shared with observer
         self.relax = 0.1
         self.running = STOPPED
 
@@ -171,7 +175,8 @@ class Worker(Thread):
                 if isinstance(event, Request):
                     self.dispatch_request(event)
                     if event.response:
-                        # log.warn('sending response: %s', event.response.dump())
+                        # log.warn('sending response: %s',
+                        # event.response.dump())
                         self.send(event.response)
                 else:
                     self.dispatch_response(*event)
@@ -227,10 +232,10 @@ class Worker(Thread):
         self.queue = observer.queue
 
     def new_request(self, **kw):
+        "Create a this-worker specific Request"
         req = Request(**kw)
         req['X-Client'] = self.hash_
         return req
-
 
 
 # End

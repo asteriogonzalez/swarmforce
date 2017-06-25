@@ -107,9 +107,7 @@ def test_swarm_calc(world):
     req.body = '1 + 2'
     client.send(req)
 
-    #until('False', 1)
-
-    time.sleep(1)
+    time.sleep(2)
 
     foo = 12
 
