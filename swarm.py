@@ -107,11 +107,12 @@ class Observer(object):
         "Analyze an event to determine if its worker must process or not."
         if self.regexp.match(event.statusline):
             if self.worker.running > SWITCHING:
+                log.debug('ACCEPTING event %s', event)
                 self.queue.append(event)
             else:
-                log.info('SKIPING event %s', event)
+                log.debug('SKIPING event %s', event)
         else:
-            pass
+            log.debug('IGNORING event %s', event)
 
     def send(self, event):
         "Send an event to the world"
@@ -145,10 +146,10 @@ class Worker(Thread):
     def stop(self, timeout=5):
         "Stops the worker while trying to flush the queue"
         if self.running != STOPPED:
-            log.info('Stopping %s', self)
+            # log.info('Stopping %s', self)
             self.running = SWITCHING
-            t1 = time.time() + timeout
-            while self.queue and time.time() < t1:
+            end = time.time() + timeout
+            while self.queue and time.time() < end:
                 time.sleep(0.1)
 
             self.running = STOPPED
@@ -163,9 +164,14 @@ class Worker(Thread):
         if self.running > PAUSED:
             if self.queue:
                 event = self.queue.pop(0)
+                log.info('%s', event.dump())
+
                 self.dispatch(event)
             else:
                 self.idle()
+        else:
+            log.info('%s is PAUSED', self)
+            time.sleep(0.2)
 
     def dispatch(self, event):
         "Process the event. Must be override."

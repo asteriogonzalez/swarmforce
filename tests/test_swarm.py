@@ -5,7 +5,7 @@ import hashlib
 import pytest
 from swarmforce.swarm import World, Observer, Worker, \
      MAX_HASH, hash_range, RUNNING, PAUSED
-from swarmforce.http import Event
+from swarmforce.http import Event, Request, Response
 
 from swarmforce.loggers import getLogger
 
@@ -17,13 +17,26 @@ def until(condition, timeout=5):
     end = time.time() + timeout
     while time.time() < end:
         result = eval(condition, frame.f_globals, frame.f_locals)
-        log.info('(%s) ==> %s', condition, result)
+        log.info("'%s' ---> %s", condition, result)
         if result:
             break
         time.sleep(0.1)
 
+class Boss(Worker):
+    "A client agent"
 
-@pytest.fixture(scope="module")
+
+class Calc(Worker):
+    "A server agent"
+    def dispatch(self, event):
+        result = eval(event.body)
+        answer = event.answer()
+        answer.body = unicode(result)
+        log.info(answer.dump())
+        # self.send(answer)
+
+
+@pytest.fixture(scope="function")
 def world():
     "Provide a world that is not shared across all tests"
     world = World()
@@ -57,7 +70,7 @@ def test_swarm_init(world):
     worker.observer.listen('UPDATE /done')
     worker.observer.listen('.* /workers')
 
-    worker.set(RUNNING)
+    worker.set(PAUSED)
 
     # match
     event = Event()
@@ -80,10 +93,33 @@ def test_swarm_init(world):
     event.body = 'Hello World'
     world.push(event)
 
-    worker.set(RUNNING)
     assert len(worker.queue) == 2
+    worker.set(RUNNING)
     until('len(worker.queue) == 0')
     assert len(worker.queue) == 0
+
+
+def test_swarm_calc(world):
+    "Simple client / server pattern"
+
+    worker = world.new(Calc)
+    worker.observer.listen('DO /inbox/calc')
+    worker.set(PAUSED)
+
+    # match
+    event = Request()
+    event.method = 'DO'
+    event.path = '/inbox/calc'
+    event.body = '1 + 2'
+    world.push(event)
+
+    assert len(worker.queue) == 1
+
+    worker.set(RUNNING)
+    until('len(worker.queue) == 0')
+    assert len(worker.queue) == 0
+
+    foo = 213
 
 
 # End

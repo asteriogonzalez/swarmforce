@@ -2,7 +2,7 @@ version: 1
 disable_existing_loggers: False
 formatters:
     complex:
-        format: "%(asctime)s - %(name)s - %(levelname)s - %(funcName)s() -  %(message)s"
+        format: "%(asctime)s %(name)10s %(levelname)7s %(funcName)9s() - %(message)s"
         datefmt: '%H:%M:%S'
 
     simple:
@@ -19,7 +19,7 @@ handlers:
 
     log_file_handler:
         class: logging.FileHandler
-        level: INFO
+        level: DEBUG
         formatter: complex
         filename: system.log
         encoding: utf8

@@ -6,7 +6,9 @@ import time
 from io import StringIO
 from random import choice
 from swarmforce.misc import random_path, random_token
+from swarmforce.loggers import getLogger
 
+log = getLogger('swarmforce')
 
 CODE_OK = '200'
 
@@ -25,9 +27,11 @@ class Event(dict):
         dict.__init__(self, *args, **kw)
 
 
-    def dump(self, exclude_headers=None):
+    def dump(self, exclude_headers=None, lines=None):
         """Dump HTTP message into a Stream"""
-        lines = []
+        if lines is None:
+            lines = []
+
         lines.append(self.statusline_fmt % self)
 
         excluded = set(['method', 'path', 'http-version', 'body'])
@@ -92,9 +96,9 @@ class Request(Event):
     copy_keys = ['http-version']
     statusline_fmt = "%(method)s %(path)s %(http-version)s"
 
-
     def answer(self, code=CODE_OK, result='OK'):
         """Create an Response message to this Request"""
+        log.debug('Creating response for %s', self)
         msg = Response(code=code, result=result)
         for key in self.copy_keys:
             msg[key] = self[key]
@@ -104,7 +108,7 @@ class Request(Event):
         """Dump HTTP message into a Stream"""
         lines = []
         lines.append("%(method)s %(path)s %(http-version)s" % self)
-        return Event.dump(exclude_headers, lines)
+        return Event.dump(self, exclude_headers, lines)
 
 
 
