@@ -16,6 +16,7 @@ class Boss(Worker):
 
     def dispatch_response(self, response, request):
         log.info('%s ---> %s', request.body, response.body)
+        self.response = response.body
 
 
 class Calc(Worker):
@@ -107,9 +108,11 @@ def test_swarm_calc(world):
     req.body = '1 + 2'
     client.send(req)
 
-    time.sleep(2)
+    until("client.response == '3'")
 
-    foo = 12
+    log.warn(client.response)
+
+    foo = 1243
 
 
 # End

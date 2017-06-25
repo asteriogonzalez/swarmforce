@@ -40,9 +40,12 @@ def until(condition, timeout=5):
     frame = sys._getframe().f_back
     end = time.time() + timeout
     while time.time() < end:
-        result = eval(condition, frame.f_globals, frame.f_locals)
-        if result:
-            break
+        try:
+            result = eval(condition, frame.f_globals, frame.f_locals)
+            if result:
+                break
+        except Exception:
+            pass
         time.sleep(0.1)
     else:
         raise RuntimeError(

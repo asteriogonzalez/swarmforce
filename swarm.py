@@ -15,11 +15,11 @@ MAX_HASH = int('f' * 40, 16)
 
 # TODO: create a cache table for most of numbers
 # TODO: Use DEFINES for http headers
-# TODO: Clarify Observer and Worker status, pending queue, etc
 # TODO: callback requests based on regexp
 # TODO: trace requests / responses tree across hosts
 # TODO: asyncronous complex tree algoritms (data flow process)
 # TODO: draw request complex executions
+# TODO: remove threading dependences and use Reactor or evenlet
 
 RUNNING = 3
 PAUSED = 2
@@ -78,8 +78,6 @@ class Observer(object):
         self.worker = worker
         self.rules = list()
         self.regexp = re.compile('invalid^.{1000,}$')
-        self.queue = list()
-        self.pending = dict()
 
         self.world.attach(self)
         self.worker.attach(self)
@@ -108,25 +106,17 @@ class Observer(object):
             if self.regexp.match(event.statusline):
                 if self.worker.running > SWITCHING:
                     log.debug('%s ACCEPTING REQUEST %s', self.worker, event)
-                    self.queue.append(event)
+                    self.worker.queue.append(event)
                 else:
                     log.debug('%s SKIPING REQUEST %s', self.worker, event)
             else:
                 log.debug('%s IGNORING event %s', self.worker, event)
         elif isinstance(event, Response):
-            # log.warn('Atending response: %s', event.dump())
             if event['X-Client'] == self.worker.hash_:
                 log.debug('%s ACCEPTING RESPONSE %s',
                           self.worker, event.dump())
-                request = self.pending.pop(event['X-Request-Id'], None)
-                if request is None:
-                    log.warn('%s Can not find associated resquest %s',
-                             self.worker, event.dump())
-                    log.warn(self.pending.keys())
-                else:
-                    log.debug('%s Found associated request: %s',
-                              self.worker, event['X-Request-Id'])
-                    self.queue.append((event, request))
+
+                self.worker.queue.append(event)
             else:
                 log.warn('%s IGNORING RESPONSE %s', self.worker, event)
         else:
@@ -134,9 +124,6 @@ class Observer(object):
 
     def send(self, event):
         "Send an event to the world"
-        if isinstance(event, Request):
-            event.hash()
-            self.pending[event.key] = event
         self.world.push(event)
 
 
@@ -152,9 +139,10 @@ class Worker(Thread):
 
         self.hash_ = hasher(unicode(id(self)))
         self.observer = None
-        self.queue = None  # shared with observer
         self.relax = 0.1
         self.running = STOPPED
+        self.queue = list()
+        self.pending = dict()
 
         log.info('New Worker at: %s', self)
 
@@ -179,7 +167,16 @@ class Worker(Thread):
                         # event.response.dump())
                         self.send(event.response)
                 else:
-                    self.dispatch_response(*event)
+                    request = self.pending.pop(event['X-Request-Id'], None)
+                    if request is None:
+                        log.warn('%s Can not find associated resquest %s',
+                                 self, event.dump())
+                        log.warn(self.pending.keys())
+                    else:
+                        log.debug('%s Found associated request: %s',
+                                  self, event['X-Request-Id'])
+
+                        self.dispatch_response(event, request)
             else:
                 self.idle()
         else:
@@ -192,7 +189,7 @@ class Worker(Thread):
 
     def dispatch_response(self, response, request):
         "Process a response. Must be overriden."
-        log.warn('ATTENDIND RESPONSE: %s from %s', response, reques)
+        log.warn('ATTENDIND RESPONSE: %s from %s', response, request)
 
     def idle(self):
         "Performs an idle task. Should be overrrided."
@@ -224,12 +221,14 @@ class Worker(Thread):
 
     def send(self, event):
         "Send an event to the world"
+        if isinstance(event, Request):
+            event.hash()
+            self.pending[event.key] = event
         self.observer.send(event)
 
     def attach(self, observer):
         "Attach the observer to inteact with the world"
         self.observer = observer
-        self.queue = observer.queue
 
     def new_request(self, **kw):
         "Create a this-worker specific Request"
