@@ -5,6 +5,8 @@ import re
 import time
 from threading import Thread
 from swarmforce.loggers import getLogger
+from swarmforce.http import Request, Response
+from swarmforce.misc import hasher, until
 
 log = getLogger('swarmforce')
 
@@ -12,6 +14,8 @@ log = getLogger('swarmforce')
 MAX_HASH = int('f' * 40, 16)
 
 # TODO: create a cache table for most of numbers
+# TODO: Use DEFINES for http headers
+# TODO: Clarify Observer and Worker status, pending queue, etc
 # TODO: callback requests based on regexp
 # TODO: trace requests / responses tree across hosts
 # TODO: asyncronous complex tree algoritms (data flow process)
@@ -21,12 +25,6 @@ RUNNING = 3
 PAUSED = 2
 SWITCHING = 1
 STOPPED = 0
-
-def swarm_hash(footprint):
-    "hasher used for all objects in project"
-    sha1 = hashlib.sha1()
-    sha1.update(footprint)
-    return int(sha1.hexdigest(), 16)
 
 
 def hash_range(i, nodes):
@@ -53,8 +51,9 @@ class World(object):
 
     def push(self, event):
         "broadcast an event to all workers trought their observers"
-        for obs in self.observers:
-            obs.attend(event)
+        if event.sane():
+            for obs in self.observers:
+                obs.attend(event)
 
     def close(self):
         "try to close all known workers"
@@ -105,19 +104,39 @@ class Observer(object):
 
     def attend(self, event):
         "Analyze an event to determine if its worker must process or not."
-        if self.regexp.match(event.statusline):
-            if self.worker.running > SWITCHING:
-                log.debug('ACCEPTING event %s', event)
-                self.queue.append(event)
+        if isinstance(event, Request):
+            if self.regexp.match(event.statusline):
+                if self.worker.running > SWITCHING:
+                    log.debug('%s ACCEPTING REQUEST %s', self.worker, event)
+                    self.queue.append(event)
+                else:
+                    log.debug('%s SKIPING REQUEST %s', self.worker, event)
             else:
-                log.debug('SKIPING event %s', event)
+                log.debug('%s IGNORING event %s', self.worker, event)
+        elif isinstance(event, Response):
+            # log.warn('Atending response: %s', event.dump())
+            if event['X-Client'] == self.worker.hash_:
+                log.warn('%s ACCEPTING RESPONSE %s', self.worker, event.dump())
+                log.warn(self.pending.keys())
+
+                request = self.pending.pop(event['X-Request-Id'], None)
+                if request is None:
+                    log.error('%s Can not find associated resquest %s', self.worker, event.dump())
+                    log.error(self.pending)
+                else:
+                    log.info('%s Found associated request: %s', self.worker, event['X-Request-Id'])
+                    self.queue.append((event, request))
+            else:
+                log.warn('%s SKIPING RESPONSE %s', self.worker, event)
         else:
-            log.debug('IGNORING event %s', event)
+            log.error('%s SKIPING UNKNOWN event %s', self.worker, event)
 
     def send(self, event):
         "Send an event to the world"
-        self.pending[event.key] = event
-        self.observer.world.push(event)
+        if isinstance(event, Request):
+            event.hash()
+            self.pending[event.key] = event
+        self.world.push(event)
 
 
 class Worker(Thread):
@@ -127,7 +146,7 @@ class Worker(Thread):
         Thread.__init__(self, group, target, name, args,
                         kwargs, verbose)
 
-        self.hash_ = swarm_hash(unicode(id(self)))
+        self.hash_ = hasher(unicode(id(self)))
         self.observer = None
         self.queue = None # shared with observer
         self.relax = 0.1
@@ -142,6 +161,46 @@ class Worker(Thread):
             self.step()
 
         log.info("FINISH: %s", self)
+
+    def step(self):
+        """Process the next event if worker is in RUNNING mode
+        or performs a idle action when queue is empty"""
+        if self.running > PAUSED:
+            if self.queue:
+                event = self.queue.pop(0)
+                if isinstance(event, Request):
+                    self.dispatch_request(event)
+                    if event.response:
+                        # log.warn('sending response: %s', event.response.dump())
+                        self.send(event.response)
+                else:
+                    self.dispatch_response(*event)
+            else:
+                self.idle()
+        else:
+            log.info('%s is PAUSED', self)
+            time.sleep(0.2)
+
+    def dispatch_request(self, event):
+        "Process the event. Must be overriden."
+        log.warn('Must be overriden: %s', event.dump())
+
+    def dispatch_response(self, response, request):
+        "Process a response. Must be overriden."
+        log.warn('ATTENDIND RESPONSE: %s from %s', response, reques)
+
+    def idle(self):
+        "Performs an idle task. Should be overrrided."
+        time.sleep(self.relax)
+
+    def set(self, running):
+        """Set the running state of worker:
+        RUNNING: process event normally
+        SWITHING: blocks incoming events while process existin in queue
+        PAUSE: do not process events, but new one area allowed
+        STOPPED: worker is done
+        """
+        self.running = running
 
     def stop(self, timeout=5):
         "Stops the worker while trying to flush the queue"
@@ -158,39 +217,6 @@ class Worker(Thread):
         else:
             log.info('Already Stopped %s', self)
 
-    def step(self):
-        """Process the next event if worker is in RUNNING mode
-        or performs a idle action when queue is empty"""
-        if self.running > PAUSED:
-            if self.queue:
-                event = self.queue.pop(0)
-                log.info('%s', event.dump())
-
-                self.dispatch(event)
-            else:
-                self.idle()
-        else:
-            log.info('%s is PAUSED', self)
-            time.sleep(0.2)
-
-    def dispatch(self, event):
-        "Process the event. Must be override."
-        # print "PROCESSING: ", event
-        pass
-
-    def idle(self):
-        "Performs an idle task. Should be overrrided."
-        time.sleep(self.relax)
-
-    def set(self, running):
-        """Set the running state of worker:
-        RUNNING: process event normally
-        SWITHING: blocks incoming events while process existin in queue
-        PAUSE: do not process events, but new one area allowed
-        STOPPED: worker is done
-        """
-        self.running = running
-
     def send(self, event):
         "Send an event to the world"
         self.observer.send(event)
@@ -199,5 +225,12 @@ class Worker(Thread):
         "Attach the observer to inteact with the world"
         self.observer = observer
         self.queue = observer.queue
+
+    def new_request(self, **kw):
+        req = Request(**kw)
+        req['X-Client'] = self.hash_
+        return req
+
+
 
 # End

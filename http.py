@@ -1,11 +1,10 @@
 """ HTTP message parser"""
 import re
 import types
-import hashlib
 import time
 from io import StringIO
 from random import choice
-from swarmforce.misc import random_path, random_token
+from swarmforce.misc import random_path, random_token, hasher
 from swarmforce.loggers import getLogger
 
 log = getLogger('swarmforce')
@@ -34,15 +33,18 @@ class Event(dict):
 
         lines.append(self.statusline_fmt % self)
 
-        excluded = set(['method', 'path', 'http-version', 'body'])
+        excluded = set(['method', 'path', 'http-version', 'body', 'code', 'result'])
         if exclude_headers:
-            excluded.difference_update(exclude_headers)
+            excluded.update(exclude_headers)
 
         body = self.body
         if body:
             self['Content-Length'] = len(body)
 
-        for key in excluded.symmetric_difference(self.keys()):
+        keys = list(excluded.symmetric_difference(self.keys()))
+        keys.sort()
+
+        for key in keys:
             if key in self:
                 value = self[key]
                 line = '%s: %s' % (key, value)
@@ -55,24 +57,30 @@ class Event(dict):
 
         return '\n'.join(lines)
 
-    def hash(self, exclude_headers=None):
+    def hash(self, exclude_headers=None, inplace=True):
         """Get the hash of the message, skiping some headers"""
         if exclude_headers:
             exclude_headers.append('X-Hash')
         else:
             exclude_headers = ['X-Hash']
 
-        raw = self.dump(exclude_headers)
-        sha1 = hashlib.sha1()
-        sha1.update(raw)
-        hash_ = sha1.hexdigest()
-        self['X-Hash'] = hash_
+        footprint = self.dump(exclude_headers)
+        hash_ = hasher(footprint)
+        if inplace:
+            self['X-Hash'] = hash_
         return hash_
 
-    @property
-    def key(self):
-        "Return a hashable object that identify this message"
-        return (self.method, self['X-Time'], self.path, self.get('X-NewPath'))
+    def sane(self):
+        "Check event sanity"
+        hash_1 = self.get('X-Hash')
+        if hash_1 is not None:
+            hash_2 = self.hash(inplace=False)
+            if hash_1 != hash_2:
+                log.error('HASH %s MISTMATCH: %s', hash_2, self.dump())
+                return False
+            else:
+                log.debug('HASH OK: %s', hash_1)
+        return True
 
     @property
     def statusline(self):
@@ -93,23 +101,29 @@ class Event(dict):
 
 class Request(Event):
     """A request HTTP style class."""
-    copy_keys = ['http-version']
+    copy_keys = ['http-version', 'X-Client']
     statusline_fmt = "%(method)s %(path)s %(http-version)s"
+    response = None  # belong to class. Override by instance.answer()
 
     def answer(self, code=CODE_OK, result='OK'):
         """Create an Response message to this Request"""
-        log.debug('Creating response for %s', self)
+        log.info('Creating response for %s', self.dump())
         msg = Response(code=code, result=result)
         for key in self.copy_keys:
-            msg[key] = self[key]
+            if self.has_key(key):
+                msg[key] = self[key]
+
+        msg['X-Request-Id'] = self['X-Hash']
+
+        self.__dict__['response'] = msg
         return msg
 
-    def dump(self, exclude_headers=None):
-        """Dump HTTP message into a Stream"""
-        lines = []
-        lines.append("%(method)s %(path)s %(http-version)s" % self)
-        return Event.dump(self, exclude_headers, lines)
 
+    @property
+    def key(self):
+        "Return a hashable object that identify this message"
+        # return (self.method, self['X-Time'], self.path, self.get('X-NewPath'))
+        return self.hash()
 
 
 class Response(Event):
@@ -117,6 +131,10 @@ class Response(Event):
 
     statusline_fmt = "%(http-version)s %(code)s %(result)s"
 
+    @property
+    def key(self):
+        "Return a hashable object that identify this message"
+        return (self['code'], self['X-Time'], )
 
 RE_HEADER = re.compile(r"(?P<name>.*?): (?P<value>.*)",
                        re.DOTALL | re.I)
@@ -161,6 +179,7 @@ def parse(stream):
     length = int(msg.get('Content-Length', 0))
 
     assert not length or len(body) == length
+
     return msg
 
 

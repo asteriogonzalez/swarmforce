@@ -119,13 +119,22 @@ def test_hash():
 def test_key():
     "Test message key"
 
-    msg1 = Event()
+    msg1 = Request()
     populate(msg1)
-
     key = msg1.key
 
+    assert isinstance(key, types.StringType)
+    assert len(key) == 40
+
+    msg2 = msg1.answer()
+    assert isinstance(msg2, Response)
+
+    populate(msg2)
+    key = msg2.key
+
     assert isinstance(key, types.TupleType)
-    assert len(key) == 4
+    assert len(key) == 2
+
 
 
 

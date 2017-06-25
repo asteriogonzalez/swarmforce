@@ -19,7 +19,7 @@ handlers:
 
     log_file_handler:
         class: logging.FileHandler
-        level: DEBUG
+        level: INFO
         formatter: complex
         filename: system.log
         encoding: utf8

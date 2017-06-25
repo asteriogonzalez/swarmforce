@@ -1,39 +1,31 @@
 """Test swarm abtraction module"""
-import sys
 import time
 import hashlib
 import pytest
 from swarmforce.swarm import World, Observer, Worker, \
      MAX_HASH, hash_range, RUNNING, PAUSED
 from swarmforce.http import Event, Request, Response
-
+from swarmforce.misc import until
 from swarmforce.loggers import getLogger
 
 log = getLogger('swarmforce')
 
-def until(condition, timeout=5):
-    "Wait until condition is true"
-    frame = sys._getframe().f_back
-    end = time.time() + timeout
-    while time.time() < end:
-        result = eval(condition, frame.f_globals, frame.f_locals)
-        log.info("'%s' ---> %s", condition, result)
-        if result:
-            break
-        time.sleep(0.1)
 
 class Boss(Worker):
     "A client agent"
 
+    def dispatch_response(self, response, request):
+        log.info('%s ---> %s', request.body, response.body)
+
 
 class Calc(Worker):
     "A server agent"
-    def dispatch(self, event):
+
+    def dispatch_request(self, event):
         result = eval(event.body)
         answer = event.answer()
         answer.body = unicode(result)
         log.info(answer.dump())
-        # self.send(answer)
 
 
 @pytest.fixture(scope="function")
@@ -73,21 +65,21 @@ def test_swarm_init(world):
     worker.set(PAUSED)
 
     # match
-    event = Event()
+    event = Request()
     event.method = 'NEW'
     event.path = '/inbox/123'
     event.body = 'Hello World'
     world.push(event)
 
     # match
-    event = Event()
+    event = Request()
     event.method = 'UPDATE'
     event.path = '/done/123'
     event.body = 'Hello World'
     world.push(event)
 
     # don't match
-    event = Event()
+    event = Request()
     event.method = 'DELETE'
     event.path = '/done/123'
     event.body = 'Hello World'
@@ -102,24 +94,24 @@ def test_swarm_init(world):
 def test_swarm_calc(world):
     "Simple client / server pattern"
 
+    client = world.new(Boss)
     worker = world.new(Calc)
     worker.observer.listen('DO /inbox/calc')
-    worker.set(PAUSED)
+
+    until('client.running > 0')
 
     # match
-    event = Request()
-    event.method = 'DO'
-    event.path = '/inbox/calc'
-    event.body = '1 + 2'
-    world.push(event)
+    req = client.new_request()
+    req.method = 'DO'
+    req.path = '/inbox/calc'
+    req.body = '1 + 2'
+    client.send(req)
 
-    assert len(worker.queue) == 1
+    #until('False', 1)
 
-    worker.set(RUNNING)
-    until('len(worker.queue) == 0')
-    assert len(worker.queue) == 0
+    time.sleep(1)
 
-    foo = 213
+    foo = 12
 
 
 # End
