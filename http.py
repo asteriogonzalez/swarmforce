@@ -8,14 +8,18 @@ from random import choice
 from swarmforce.misc import random_path, random_token
 
 
-
+CODE_OK = '200'
 
 class Event(dict):
     """Parse HTTP messages and store info in a dict
     like object."""
 
+    statusline_fmt = "%(method)s %(path)s %(http-version)s"
+
     def __init__(self, *args, **kw):
-        self['body'] = u''
+        kw.setdefault('http-version', 'HTTP/1.1')
+        kw.setdefault('body', u'')
+
         if 'X-Time' not in kw:
             kw['X-Time'] = str(time.time())
         dict.__init__(self, *args, **kw)
@@ -24,16 +28,21 @@ class Event(dict):
     def dump(self, exclude_headers=None):
         """Dump HTTP message into a Stream"""
         lines = []
-        lines.append("%(method)s %(path)s %(http-version)s" % self)
+        lines.append(self.statusline_fmt % self)
 
         excluded = set(['method', 'path', 'http-version', 'body'])
         if exclude_headers:
             excluded.difference_update(exclude_headers)
 
+        body = self.body
+        if body:
+            self['Content-Length'] = len(body)
+
         for key in excluded.symmetric_difference(self.keys()):
-            value = self[key]
-            line = '%s: %s' % (key, value)
-            lines.append(line)
+            if key in self:
+                value = self[key]
+                line = '%s: %s' % (key, value)
+                lines.append(line)
 
         body = self.body
         if body:
@@ -58,12 +67,15 @@ class Event(dict):
 
     @property
     def key(self):
+        "Return a hashable object that identify this message"
         return (self.method, self['X-Time'], self.path, self.get('X-NewPath'))
 
     @property
     def statusline(self):
+        """returns the statusline of the message that
+        is used to determine the class of message (e.g Request, Response)
+        according to HTTP protocol"""
         return '%(method)s %(path)s' % self
-
 
     def __getattr__(self, key):
         # if hasattr(self, key):
@@ -76,18 +88,39 @@ class Event(dict):
 
 
 class Request(Event):
-    pass
+    """A request HTTP style class."""
+    copy_keys = ['http-version']
+    statusline_fmt = "%(method)s %(path)s %(http-version)s"
+
+
+    def answer(self, code=CODE_OK, result='OK'):
+        """Create an Response message to this Request"""
+        msg = Response(code=code, result=result)
+        for key in self.copy_keys:
+            msg[key] = self[key]
+        return msg
+
+    def dump(self, exclude_headers=None):
+        """Dump HTTP message into a Stream"""
+        lines = []
+        lines.append("%(method)s %(path)s %(http-version)s" % self)
+        return Event.dump(exclude_headers, lines)
+
 
 
 class Response(Event):
-    pass
+    """A response HTTP style class."""
+
+    statusline_fmt = "%(http-version)s %(code)s %(result)s"
 
 
 RE_HEADER = re.compile(r"(?P<name>.*?): (?P<value>.*)",
                        re.DOTALL | re.I)
 
-RE_REQ = re.compile(r"(?P<method>\S+)\s+(?P<path>\S+)\s+(?P<http_version>HTTP\/.+)$", re.DOTALL | re.I)
-RE_RES = re.compile(r"(?P<http_version>HTTP\/\S+)\s+(?P<code>\S+)\s+(?P<result>.*)$", re.DOTALL | re.I)
+RE_REQ = re.compile(r"(?P<method>\S+)\s+(?P<path>\S+)\s+(?P<http_version>HTTP\/.+)$",
+                    re.DOTALL | re.I)
+RE_RES = re.compile(r"(?P<http_version>HTTP\/\S+)\s+(?P<code>\S+)\s+(?P<result>.*)$",
+                    re.DOTALL | re.I)
 
 PARSE_MAP = dict()
 PARSE_MAP[RE_REQ] = Request
@@ -123,7 +156,6 @@ def parse(stream):
     msg['body'] = body = stream.read()
     length = int(msg.get('Content-Length', 0))
 
-    print "LENGHT:", length, len(body)
     assert not length or len(body) == length
     return msg
 

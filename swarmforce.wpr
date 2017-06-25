@@ -12,6 +12,8 @@ proj.directory-list = [{'dirloc': loc('tests'),
                         'watch_for_changes': True}]
 proj.file-list = [loc('foo.py'),
                   loc('http.py'),
+                  loc('loggers.py'),
+                  loc('logging.yaml'),
                   loc('misc.py'),
                   loc('pylintrc'),
                   loc('pytest.ini'),
