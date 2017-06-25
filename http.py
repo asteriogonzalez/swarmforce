@@ -11,6 +11,11 @@ log = getLogger('swarmforce')
 
 CODE_OK = '200'
 
+X_CLIENT = 'X-Client-Id'
+X_REQ_ID = 'X-Request-Id'
+X_TIME = 'X-Time'
+X_HASH = 'X-Hash'
+
 
 class Event(dict):
     """Parse HTTP messages and store info in a dict
@@ -22,8 +27,8 @@ class Event(dict):
         kw.setdefault('http-version', 'HTTP/1.1')
         kw.setdefault('body', u'')
 
-        if 'X-Time' not in kw:
-            kw['X-Time'] = str(time.time())
+        if X_TIME not in kw:
+            kw[X_TIME] = str(time.time())
         dict.__init__(self, *args, **kw)
 
     def dump(self, exclude_headers=None, lines=None):
@@ -60,19 +65,19 @@ class Event(dict):
     def hash(self, exclude_headers=None, inplace=True):
         """Get the hash of the message, skiping some headers"""
         if exclude_headers:
-            exclude_headers.append('X-Hash')
+            exclude_headers.append(X_HASH)
         else:
-            exclude_headers = ['X-Hash']
+            exclude_headers = [X_HASH]
 
         footprint = self.dump(exclude_headers)
         hash_ = hasher(footprint)
         if inplace:
-            self['X-Hash'] = hash_
+            self[X_HASH] = hash_
         return hash_
 
     def sane(self):
         "Check event sanity"
-        hash_1 = self.get('X-Hash')
+        hash_1 = self.get(X_HASH)
         if hash_1 is not None:
             hash_2 = self.hash(inplace=False)
             if hash_1 != hash_2:
@@ -100,7 +105,7 @@ class Event(dict):
 
 class Request(Event):
     """A request HTTP style class."""
-    copy_keys = ['http-version', 'X-Client']
+    copy_keys = ['http-version', X_CLIENT]
     statusline_fmt = "%(method)s %(path)s %(http-version)s"
     response = None  # belong to class. Override by instance.answer()
 
@@ -112,7 +117,7 @@ class Request(Event):
             if key in self:
                 msg[key] = self[key]
 
-        msg['X-Request-Id'] = self['X-Hash']
+        msg[X_REQ_ID] = self[X_HASH]
 
         self.__dict__['response'] = msg
         return msg
@@ -120,7 +125,6 @@ class Request(Event):
     @property
     def key(self):
         "Return a hashable object that identify this message"
-        # return (self.method, self['X-Time'], self.path, self.get('X-NewPath'))
         return self.hash()
 
 
@@ -132,7 +136,7 @@ class Response(Event):
     @property
     def key(self):
         "Return a hashable object that identify this message"
-        return (self['code'], self['X-Time'], )
+        return (self['code'], self[X_TIME], )
 
 RE_HEADER = re.compile(r"(?P<name>.*?): (?P<value>.*)",
                        re.DOTALL | re.I)

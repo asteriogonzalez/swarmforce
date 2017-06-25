@@ -5,7 +5,8 @@ import re
 import time
 from threading import Thread
 from swarmforce.loggers import getLogger
-from swarmforce.http import Request, Response
+from swarmforce.http import Request, Response, \
+     X_CLIENT, X_REQ_ID
 from swarmforce.misc import hasher, until
 
 log = getLogger('swarmforce')
@@ -14,12 +15,13 @@ log = getLogger('swarmforce')
 MAX_HASH = int('f' * 40, 16)
 
 # TODO: create a cache table for most of numbers
-# TODO: Use DEFINES for http headers
+# DONE: Use DEFINES for http headers
 # TODO: callback requests based on regexp
 # TODO: trace requests / responses tree across hosts
 # TODO: asyncronous complex tree algoritms (data flow process)
 # TODO: draw request complex executions
-# TODO: remove threading dependences and use Reactor or evenlet
+# DONE: remove threading dependences and use Reactor or evenlet
+
 
 RUNNING = 3
 PAUSED = 2
@@ -38,119 +40,53 @@ def hash_order(a, b):
     return cmp(a.hash_, b.hash_)
 
 
-class World(object):
+class World(Thread):
     """Abstraction of world visible for a swarm"""
-    def __init__(self):
-        self.observers = list()
-        self.workers = dict()
-        log.info('New World at: %s', self)
+    def __init__(self, group=None, target=None, name=None,
+             args=(), kwargs=None, verbose=None):
 
-    def attach(self, obs):
-        "attach an observer to this world"
-        self.observers.append(obs)
+        Thread.__init__(self, group, target, name, args,
+                        kwargs, verbose)
+
+        self.workers = dict()
+        self.running = STOPPED
+        self.relax = 0.1
+
+        self.queue = list()
+        self.pending = dict()
+
+
+        log.info('New World at: %s', self)
 
     def push(self, event):
         "broadcast an event to all workers trought their observers"
-        if event.sane():
-            for obs in self.observers:
-                obs.attend(event)
+        if isinstance(event, Request):
+            event.hash()
+            self.pending[event.key] = event
 
-    def close(self):
-        "try to close all known workers"
-        for worker in self.workers.values():
-            worker.stop()
+        if event.sane():
+            self.queue.append(event)
+        else:
+            log.error('MALFORMED event: %s', event.dump())
+
 
     def new(self, klass, *args, **kw):
         """Create a pair of worker / observer, attach them
         and set worker to run."""
 
         worker = klass(*args, **kw)
-        observer = Observer(self, worker)
-        worker.start()
         self.workers[worker.hash_] = worker
+        worker.world = self
         return worker
-
-
-class Observer(object):
-    """World observer"""
-    def __init__(self, world, worker):
-        self.world = world
-        self.worker = worker
-        self.rules = list()
-        self.regexp = re.compile('invalid^.{1000,}$')
-
-        self.world.attach(self)
-        self.worker.attach(self)
-
-    def listen(self, rule):
-        """Append a new listen rule to the existing and
-        compiles a full reg expression that match any of the rules.
-        """
-        self.rules.append(rule)
-        # build a single regexp that match all rules
-        allrules = u'|'.join(['(%s)' % s for s in self.rules])
-        self.regexp = re.compile(allrules,
-                                 re.DOTALL | re.I | re.UNICODE)
-
-    def detach(self, rule):
-        "remove a rule and rebuild the full regexp"
-        self.rules.remove(rule)
-        # build a single regexp that match all rules
-        allrules = u'|'.join(['(%s)' % s for s in self.rules])
-        self.regexp = re.compile(allrules,
-                                 re.DOTALL | re.I | re.UNICODE)
-
-    def attend(self, event):
-        "Analyze an event to determine if its worker must process or not."
-        if isinstance(event, Request):
-            if self.regexp.match(event.statusline):
-                if self.worker.running > SWITCHING:
-                    log.debug('%s ACCEPTING REQUEST %s', self.worker, event)
-                    self.worker.queue.append(event)
-                else:
-                    log.debug('%s SKIPING REQUEST %s', self.worker, event)
-            else:
-                log.debug('%s IGNORING event %s', self.worker, event)
-        elif isinstance(event, Response):
-            if event['X-Client'] == self.worker.hash_:
-                log.debug('%s ACCEPTING RESPONSE %s',
-                          self.worker, event.dump())
-
-                self.worker.queue.append(event)
-            else:
-                log.warn('%s IGNORING RESPONSE %s', self.worker, event)
-        else:
-            log.error('%s SKIPING UNKNOWN event %s', self.worker, event)
-
-    def send(self, event):
-        "Send an event to the world"
-        self.world.push(event)
-
-
-class Worker(Thread):
-    """A treaded worker that process request and responses from a queue
-    managed by an observer which connect the worker to the world.
-    """
-    def __init__(self, group=None, target=None, name=None,
-                 args=(), kwargs=None, verbose=None):
-
-        Thread.__init__(self, group, target, name, args,
-                        kwargs, verbose)
-
-        self.hash_ = hasher(unicode(id(self)))
-        self.observer = None
-        self.relax = 0.1
-        self.running = STOPPED
-        self.queue = list()
-        self.pending = dict()
-
-        log.info('New Worker at: %s', self)
 
     def run(self):
         log.info("RUN: %s", self)
+        end = time.time() + 60
         self.running = RUNNING
         while self.running > STOPPED:
             self.step()
+            if time.time() > end:
+                break
 
         log.info("FINISH: %s", self)
 
@@ -165,31 +101,24 @@ class Worker(Thread):
                     if event.response:
                         # log.warn('sending response: %s',
                         # event.response.dump())
-                        self.send(event.response)
-                else:
-                    request = self.pending.pop(event['X-Request-Id'], None)
+                        self.push(event.response)
+                else:  # Response
+                    request = self.pending.pop(event[X_REQ_ID], None)
                     if request is None:
                         log.warn('%s Can not find associated resquest %s',
                                  self, event.dump())
                         log.warn(self.pending.keys())
                     else:
                         log.debug('%s Found associated request: %s',
-                                  self, event['X-Request-Id'])
+                                  self, event[X_REQ_ID])
 
-                        self.dispatch_response(event, request)
+                        worker = self.workers.get(event[X_CLIENT])
+                        worker.dispatch_response(event, request)
             else:
                 self.idle()
         else:
             log.info('%s is PAUSED', self)
             time.sleep(0.2)
-
-    def dispatch_request(self, event):
-        "Process the event. Must be overriden."
-        log.warn('Must be overriden: %s', event.dump())
-
-    def dispatch_response(self, response, request):
-        "Process a response. Must be overriden."
-        log.warn('ATTENDIND RESPONSE: %s from %s', response, request)
 
     def idle(self):
         "Performs an idle task. Should be overrrided."
@@ -219,22 +148,93 @@ class Worker(Thread):
         else:
             log.info('Already Stopped %s', self)
 
+
+    def dispatch_request(self, event):
+        "Process the event. Must be overriden."
+        for worker in self.workers.values():
+            worker.dispatch_request(event)
+
+    def dispatch_response(self, response, request):
+        "Process a response. Must be overriden."
+
+        if worker is not None:
+            worker.dispatch_response(response, request)
+
+        log.warn('ATTENDIND RESPONSE: %s from %s', response, request)
+
+class Worker(object):
+    """A treaded worker that process request and responses from a queue
+    managed by an observer which connect the worker to the world.
+    """
+    def __init__(self):
+
+        self.hash_ = hasher(unicode(id(self)))
+        self.world = None
+
+        self.rules = list()
+        self.regexp = re.compile('invalid^.{1000,}$')
+
+        log.info('New Worker at: %s', self)
+
+    def dispatch_request(self, event):
+        "Process the event. Must be overriden."
+        log.warn('Must be overriden: %s', event.dump())
+
+    def dispatch_response(self, response, request):
+        "Process a response. Must be overriden."
+        log.warn('ATTENDIND RESPONSE: %s from %s', response, request)
+
+
     def send(self, event):
         "Send an event to the world"
-        if isinstance(event, Request):
-            event.hash()
-            self.pending[event.key] = event
-        self.observer.send(event)
-
-    def attach(self, observer):
-        "Attach the observer to inteact with the world"
-        self.observer = observer
+        self.world.push(event)
 
     def new_request(self, **kw):
         "Create a this-worker specific Request"
         req = Request(**kw)
-        req['X-Client'] = self.hash_
+        req[X_CLIENT] = self.hash_
         return req
+
+    # observer part
+    def listen(self, rule):
+        """Append a new listen rule to the existing and
+        compiles a full reg expression that match any of the rules.
+        """
+        self.rules.append(rule)
+        # build a single regexp that match all rules
+        allrules = u'|'.join(['(%s)' % s for s in self.rules])
+        self.regexp = re.compile(allrules,
+                                 re.DOTALL | re.I | re.UNICODE)
+
+    def unlisten(self, rule):
+        "remove a rule and rebuild the full regexp"
+        self.rules.remove(rule)
+        # build a single regexp that match all rules
+        allrules = u'|'.join(['(%s)' % s for s in self.rules])
+        self.regexp = re.compile(allrules,
+                                 re.DOTALL | re.I | re.UNICODE)
+
+    def attend(self, event):
+        "Analyze an event to determine if its worker must process or not."
+        if isinstance(event, Request):
+            if self.regexp.match(event.statusline):
+                if self.running > SWITCHING:
+                    log.debug('%s ACCEPTING REQUEST %s', self, event)
+                    self.queue.append(event)
+                else:
+                    log.debug('%s SKIPING REQUEST %s', self, event)
+            else:
+                log.debug('%s IGNORING event %s', self, event)
+        elif isinstance(event, Response):
+            if event[X_CLIENT] == self.hash_:
+                log.debug('%s ACCEPTING RESPONSE %s',
+                          self, event.dump())
+
+                self.queue.append(event)
+            else:
+                log.warn('%s IGNORING RESPONSE %s', self, event)
+        else:
+            log.error('%s SKIPING UNKNOWN event %s', self, event)
 
 
 # End
