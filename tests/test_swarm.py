@@ -110,13 +110,11 @@ def test_swarm_calc(world):
     req.body = '1 + 2'
     client.send(req)
 
-    time.sleep(1)
-
     until("client.response == '3'")
 
     log.warn(client.response)
 
-    foo = 1243
+    foo = 123
 
 
 # End

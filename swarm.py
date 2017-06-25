@@ -43,7 +43,7 @@ def hash_order(a, b):
 class World(Thread):
     """Abstraction of world visible for a swarm"""
     def __init__(self, group=None, target=None, name=None,
-             args=(), kwargs=None, verbose=None):
+                 args=(), kwargs=None, verbose=None):
 
         Thread.__init__(self, group, target, name, args,
                         kwargs, verbose)
@@ -103,17 +103,7 @@ class World(Thread):
                         # event.response.dump())
                         self.push(event.response)
                 else:  # Response
-                    request = self.pending.pop(event[X_REQ_ID], None)
-                    if request is None:
-                        log.warn('%s Can not find associated resquest %s',
-                                 self, event.dump())
-                        log.warn(self.pending.keys())
-                    else:
-                        log.debug('%s Found associated request: %s',
-                                  self, event[X_REQ_ID])
-
-                        worker = self.workers.get(event[X_CLIENT])
-                        worker.dispatch_response(event, request)
+                    self.dispatch_response(event)
             else:
                 self.idle()
         else:
@@ -154,13 +144,20 @@ class World(Thread):
         for worker in self.workers.values():
             worker.dispatch_request(event)
 
-    def dispatch_response(self, response, request):
+    def dispatch_response(self, event):
         "Process a response. Must be overriden."
 
-        if worker is not None:
-            worker.dispatch_response(response, request)
+        request = self.pending.pop(event[X_REQ_ID], None)
+        if request is None:
+            log.warn('%s Can not find associated resquest %s',
+                     self, event.dump())
+            log.warn(self.pending.keys())
+        else:
+            log.debug('%s Found associated request: %s',
+                      self, event[X_REQ_ID])
 
-        log.warn('ATTENDIND RESPONSE: %s from %s', response, request)
+            worker = self.workers.get(event[X_CLIENT])
+            worker.dispatch_response(event, request)
 
 class Worker(object):
     """A treaded worker that process request and responses from a queue
@@ -213,28 +210,6 @@ class Worker(object):
         allrules = u'|'.join(['(%s)' % s for s in self.rules])
         self.regexp = re.compile(allrules,
                                  re.DOTALL | re.I | re.UNICODE)
-
-    def attend(self, event):
-        "Analyze an event to determine if its worker must process or not."
-        if isinstance(event, Request):
-            if self.regexp.match(event.statusline):
-                if self.running > SWITCHING:
-                    log.debug('%s ACCEPTING REQUEST %s', self, event)
-                    self.queue.append(event)
-                else:
-                    log.debug('%s SKIPING REQUEST %s', self, event)
-            else:
-                log.debug('%s IGNORING event %s', self, event)
-        elif isinstance(event, Response):
-            if event[X_CLIENT] == self.hash_:
-                log.debug('%s ACCEPTING RESPONSE %s',
-                          self, event.dump())
-
-                self.queue.append(event)
-            else:
-                log.warn('%s IGNORING RESPONSE %s', self, event)
-        else:
-            log.error('%s SKIPING UNKNOWN event %s', self, event)
 
 
 # End
