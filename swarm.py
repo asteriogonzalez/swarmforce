@@ -17,7 +17,7 @@ MAX_HASH = int('f' * 40, 16)
 # TODO: create a cache table for most of numbers
 # DONE: Use DEFINES for http headers
 # DONE: callback requests based on regexp
-# TODO: timer and deferred requests
+# DONE: timer and deferred requests
 # TODO: trace requests / responses tree across hosts
 # TODO: asyncronous complex tree algoritms (data flow process)
 # TODO: draw request complex executions
@@ -52,9 +52,9 @@ class World(Thread):
         self.workers = dict()
         self.running = STOPPED
         self.relax = 0.1
-        self.now = 0
-        self.check = 0
         self.timeout = 0.25
+        self.now = time.time()
+        self.check = 0
 
         self.queue = list()
         self.deferred = list()
@@ -70,7 +70,8 @@ class World(Thread):
 
         if event.sane():
             timeout = event.get(X_TIME)
-            if timeout is not None and float(timeout) > time.time():
+            if timeout is not None and \
+               float(timeout) > time.time():  # don't use self.now !
                 self._push_deferred(event)
             else:
                 self.queue.append(event)
@@ -90,12 +91,18 @@ class World(Thread):
         log.info("RUN: %s", self)
         end = time.time() + 60
         self.running = RUNNING
-        self.check = time.time() + self.timeout
+        self.check = self.now + self.timeout
         while self.running > STOPPED:
             self.now = time.time()
             self.step()
+
             if self.now > end:
                 break
+
+            if self.now >= self.check:
+                log.debug('Checking housekeeping...')
+                self.check = self.now + self.timeout
+                self._check_deferred()
 
         log.info("FINISH: %s", self)
 
@@ -118,10 +125,6 @@ class World(Thread):
                     self.dispatch_response(event)
             else:
                 self.idle()
-            if self.now >= self.check:
-                log.debug('Checking housekeeping...')
-                self.check = self.now + self.timeout
-                self._check_deferred()
         else:
             log.info('%s is PAUSED', self)
             time.sleep(0.2)
@@ -202,7 +205,7 @@ class World(Thread):
         timeout = event[X_TIME] + event.get(X_TIMEOUT, 0)
         event[X_TIME] = timeout
         for i, msg in enumerate(self.deferred):
-            if timeout < msg[X_TIMEOUT]:
+            if timeout < msg[X_TIME]:
                 log.debug('insert into %s of deferred queue', i)
                 self.deferred.insert(i, event)
                 break
