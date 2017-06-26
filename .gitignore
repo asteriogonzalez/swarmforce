@@ -6,4 +6,5 @@ htmlcov
 .cache
 *.wpu
 *.log
+.DS_Store
 
