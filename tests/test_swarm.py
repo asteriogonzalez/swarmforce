@@ -4,7 +4,8 @@ import hashlib
 import pytest
 from swarmforce.swarm import World, Worker, \
      MAX_HASH, hash_range, RUNNING, PAUSED
-from swarmforce.http import Event, Request, Response, X_TIME, X_REMAIN_EXECUTIONS
+from swarmforce.http import Event, Request, Response, \
+     X_TIME, X_REMAIN_EXECUTIONS
 from swarmforce.misc import until
 from swarmforce.loggers import getLogger
 
@@ -120,7 +121,6 @@ def test_swarm_calc(world):
 
     until("client.response == '3'")
 
-    log.warn(client.response)
 
 def test_deferred_requests(world):
     """test timeout and deferred responses"""

@@ -174,7 +174,6 @@ class World(Thread):
         else:
             log.info('Already Stopped %s', self)
 
-
     def dispatch_request(self, event):
         "Process the event. Must be overriden."
         for worker in self.workers.values():
@@ -186,7 +185,7 @@ class World(Thread):
         request = self.pending.pop(event[X_REQ_ID], None)
         if request is None:
             log.error('%s Can not find associated resquest %s',
-                     self, event.dump())
+                      self, event.dump())
             log.warn('Pending request are: %s', self.pending.keys())
         else:
             log.debug('%s Found associated request: %s',
@@ -206,9 +205,11 @@ class World(Thread):
             if timeout < msg[X_TIMEOUT]:
                 log.debug('insert into %s of deferred queue', i)
                 self.deferred.insert(i, event)
+                break
         else:
             log.debug('append to deferred queue')
             self.deferred.append(event)
+
 
 class Worker(object):
     """A treaded worker that process request and responses from a queue
@@ -270,15 +271,9 @@ class Worker(object):
 
     # response handlers
     def add_response_handler(self, regexp, func):
+        """Add callbacks based on a reg expression with responses return code."""
         self.response_callbacks.append(
             (re.compile(regexp, re.I | re.DOTALL), func))
-
-    def response_OK(self, respone, request):
-        pass
-
-    def response_ERROR(self, respone, request):
-        pass
-
 
 
 # End

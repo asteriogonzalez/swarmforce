@@ -38,7 +38,8 @@ class Event(dict):
 
         lines.append(self.statusline_fmt % self)
 
-        excluded = set(['method', 'path', 'http-version', 'body', 'code', 'result'])
+        excluded = set(['method', 'path', 'http-version',
+                        'body', 'code', 'result'])
         if exclude_headers:
             excluded.update(exclude_headers)
 
@@ -141,10 +142,12 @@ class Response(Event):
 RE_HEADER = re.compile(r"(?P<name>.*?): (?P<value>.*)",
                        re.DOTALL | re.I)
 
-RE_REQ = re.compile(r"(?P<method>\S+)\s+(?P<path>\S+)\s+(?P<http_version>HTTP\/.+)$",
-                    re.DOTALL | re.I)
-RE_RES = re.compile(r"(?P<http_version>HTTP\/\S+)\s+(?P<code>\S+)\s+(?P<result>.*)$",
-                    re.DOTALL | re.I)
+RE_REQ = re.compile(
+    r"(?P<method>\S+)\s+(?P<path>\S+)\s+(?P<http_version>HTTP\/.+)$",
+    re.DOTALL | re.I)
+RE_RES = re.compile(
+    r"(?P<http_version>HTTP\/\S+)\s+(?P<code>\S+)\s+(?P<result>.*)$",
+    re.DOTALL | re.I)
 
 PARSE_MAP = dict()
 PARSE_MAP[RE_REQ] = Request
