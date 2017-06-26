@@ -4,7 +4,7 @@ import hashlib
 import pytest
 from swarmforce.swarm import World, Worker, \
      MAX_HASH, hash_range, RUNNING, PAUSED
-from swarmforce.http import Event, Request, Response
+from swarmforce.http import Event, Request, Response, X_TIME, X_REMAIN_EXECUTIONS
 from swarmforce.misc import until
 from swarmforce.loggers import getLogger
 
@@ -17,16 +17,18 @@ class Boss(Worker):
     def __init__(self):
         Worker.__init__(self)
         self.add_response_handler('2\d\d$', self.response_OK)
+        self.hits = 0
 
     def response_OK(self, response):
         request = response.request
         log.info('%s ---> %s', request.body, response.body)
         self.response = response.body
+        self.hits += 1
+        log.info('hits: %s', self.hits)
 
 
 class Calc(Worker):
     "A server agent"
-
 
     def dispatch_request(self, event):
         result = eval(event.body)
@@ -120,7 +122,51 @@ def test_swarm_calc(world):
 
     log.warn(client.response)
 
-    foo = 123
+def test_deferred_requests(world):
+    """test timeout and deferred responses"""
+    client = world.new(Boss)
+    worker = world.new(Calc)
+    worker.listen('DO /inbox/calc')
+
+    now = time.time()
+    req = client.new_request()
+    req.method = 'DO'
+    req.path = '/inbox/calc'
+    req.body = '1 + 2'
+    req[X_TIME] = now + 1
+    client.send(req)
+
+    assert not world.queue
+
+    until("client.response == '3'")
+
+
+def test_remain_executions(world):
+    """test remain executions for a requests"""
+
+    client = world.new(Boss)
+    worker = world.new(Calc)
+    worker.listen('DO /inbox/calc')
+
+    N = 3
+    req = client.new_request()
+    req.method = 'DO'
+    req.path = '/inbox/calc'
+    req.body = '1 + 2'
+    req[X_REMAIN_EXECUTIONS] = N
+    client.send(req)
+
+    until("client.hits == N")
+
+
+def test_connect_swarm(world):
+    """# TODO: USER HISTORY 'connect to swarm'
+    # 1. from console, launch swarm node
+    # 2. view swarm status
+    # 3. launch some calc workers that stay idle
+    # 4. create 100 requets and let the swarm process them
+    # 5. query for stats
+"""
 
 
 # End

@@ -15,6 +15,8 @@ X_CLIENT = 'X-Client-Id'
 X_REQ_ID = 'X-Request-Id'
 X_TIME = 'X-Time'
 X_HASH = 'X-Hash'
+X_TIMEOUT = 'X-Timeout'
+X_REMAIN_EXECUTIONS = 'X-Remain-Executions'
 
 
 class Event(dict):
@@ -26,9 +28,7 @@ class Event(dict):
     def __init__(self, *args, **kw):
         kw.setdefault('http-version', 'HTTP/1.1')
         kw.setdefault('body', u'')
-
-        if X_TIME not in kw:
-            kw[X_TIME] = str(time.time())
+        kw.setdefault(X_TIME, time.time())
         dict.__init__(self, *args, **kw)
 
     def dump(self, exclude_headers=None, lines=None):

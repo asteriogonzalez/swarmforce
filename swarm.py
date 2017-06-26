@@ -6,7 +6,7 @@ import time
 from threading import Thread
 from swarmforce.loggers import getLogger
 from swarmforce.http import Request, Response, \
-     X_CLIENT, X_REQ_ID
+     X_CLIENT, X_REQ_ID, X_TIME, X_TIMEOUT, X_REMAIN_EXECUTIONS
 from swarmforce.misc import hasher, until
 
 log = getLogger('swarmforce')
@@ -17,6 +17,7 @@ MAX_HASH = int('f' * 40, 16)
 # TODO: create a cache table for most of numbers
 # DONE: Use DEFINES for http headers
 # DONE: callback requests based on regexp
+# TODO: timer and deferred requests
 # TODO: trace requests / responses tree across hosts
 # TODO: asyncronous complex tree algoritms (data flow process)
 # TODO: draw request complex executions
@@ -51,10 +52,13 @@ class World(Thread):
         self.workers = dict()
         self.running = STOPPED
         self.relax = 0.1
+        self.now = 0
+        self.check = 0
+        self.timeout = 0.25
 
         self.queue = list()
+        self.deferred = list()
         self.pending = dict()
-
 
         log.info('New World at: %s', self)
 
@@ -65,10 +69,13 @@ class World(Thread):
             self.pending[event.key] = event
 
         if event.sane():
-            self.queue.append(event)
+            timeout = event.get(X_TIME)
+            if timeout is not None and float(timeout) > time.time():
+                self._push_deferred(event)
+            else:
+                self.queue.append(event)
         else:
             log.error('MALFORMED event: %s', event.dump())
-
 
     def new(self, klass, *args, **kw):
         """Create a pair of worker / observer, attach them
@@ -83,9 +90,11 @@ class World(Thread):
         log.info("RUN: %s", self)
         end = time.time() + 60
         self.running = RUNNING
+        self.check = time.time() + self.timeout
         while self.running > STOPPED:
+            self.now = time.time()
             self.step()
-            if time.time() > end:
+            if self.now > end:
                 break
 
         log.info("FINISH: %s", self)
@@ -98,6 +107,9 @@ class World(Thread):
                 event = self.queue.pop(0)
                 if isinstance(event, Request):
                     self.dispatch_request(event)
+                    if X_TIMEOUT in event or \
+                       X_REMAIN_EXECUTIONS in event:
+                        self._push_deferred(event)
                     if event.response:
                         # log.warn('sending response: %s',
                         # event.response.dump())
@@ -106,13 +118,37 @@ class World(Thread):
                     self.dispatch_response(event)
             else:
                 self.idle()
+            if self.now >= self.check:
+                log.debug('Checking housekeeping...')
+                self.check = self.now + self.timeout
+                self._check_deferred()
         else:
             log.info('%s is PAUSED', self)
             time.sleep(0.2)
 
     def idle(self):
-        "Performs an idle task. Should be overrrided."
+        """Performs an idle task. Should be overrrided."""
         time.sleep(self.relax)
+
+    def _check_deferred(self):
+        """Check for any deferred request that mush be fired"""
+        timeout = self.now
+        log.debug('%s elements in deferred queue', len(self.deferred))
+        while self.deferred:
+            if self.deferred[0][X_TIME] <= timeout:
+                # TODO: re-hash he request?
+                event = self.deferred.pop(0)
+                if X_REMAIN_EXECUTIONS in event:
+                    counter = int(event[X_REMAIN_EXECUTIONS]) - 1
+                    if counter < 0:
+                        continue
+                    event[X_REMAIN_EXECUTIONS] = str(counter)
+
+                log.debug('moving %s to running queue', event.key)
+                self.push(event)
+                # self.queue.append(event)
+            else:
+                break
 
     def set(self, running):
         """Set the running state of worker:
@@ -149,9 +185,9 @@ class World(Thread):
 
         request = self.pending.pop(event[X_REQ_ID], None)
         if request is None:
-            log.warn('%s Can not find associated resquest %s',
+            log.error('%s Can not find associated resquest %s',
                      self, event.dump())
-            log.warn(self.pending.keys())
+            log.warn('Pending request are: %s', self.pending.keys())
         else:
             log.debug('%s Found associated request: %s',
                       self, event[X_REQ_ID])
@@ -159,6 +195,20 @@ class World(Thread):
             event.request = request
             worker = self.workers.get(event[X_CLIENT])
             worker.dispatch_response(event)
+
+    def _push_deferred(self, event):
+        if int(event.get(X_REMAIN_EXECUTIONS, '1')) <= 0:
+            log.warn('No more remain executions!')
+            return
+        timeout = event[X_TIME] + event.get(X_TIMEOUT, 0)
+        event[X_TIME] = timeout
+        for i, msg in enumerate(self.deferred):
+            if timeout < msg[X_TIMEOUT]:
+                log.debug('insert into %s of deferred queue', i)
+                self.deferred.insert(i, event)
+        else:
+            log.debug('append to deferred queue')
+            self.deferred.append(event)
 
 class Worker(object):
     """A treaded worker that process request and responses from a queue
@@ -178,7 +228,7 @@ class Worker(object):
 
     def dispatch_request(self, event):
         "Process the event. Must be overriden."
-        log.warn('Must be overriden: %s', event.dump())
+        log.info('Must be overriden: %s', event.dump())
 
     def dispatch_response(self, event):
         "Process a response. Must be overriden."
