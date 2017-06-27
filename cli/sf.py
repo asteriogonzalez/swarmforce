@@ -4,7 +4,6 @@ import time
 import os
 import signal
 import psutil
-from StringIO import StringIO
 from cement.core.foundation import CementApp
 from cement.core import hook
 from cement.utils.misc import init_defaults
@@ -15,11 +14,12 @@ from cement.ext.ext_daemon import Environment
 
 # project defined Handlers
 from monitor import MonitorController
+from show import ShowController
 
 # define our default configuration options
 defaults = init_defaults('swarmforce', 'log.logging')
 defaults['swarmforce']['debug'] = False
-defaults['swarmforce']['some_param'] = 'some value'
+defaults['swarmforce']['workers'] = '1'
 
 # -----------------------------------------
 # Hooks and Signals
@@ -65,6 +65,16 @@ class DefaultController(CementBaseController):
             ( ['-f', '--file'],
               dict(action='store', help='filename') ),
 
+            ( ['-w', '--workers'],
+              dict(action='store', help='num workers') ),
+
+            ( ['--force'],
+              dict(action='store', help='force operation') ),
+
+            ( ['--timeout'],
+              dict(action='store', help='timeout in seconds') ),
+
+
             ]
 
     @expose(hide=True)  # not shown with --help
@@ -76,17 +86,26 @@ class DefaultController(CementBaseController):
             print("Recieved option: file => %s" % self.app.pargs.file)
 
 
-    @expose(aliases=['showcfg'], help="Show the whole configuration")
-    def show_config(self):
-        """Show or save configuration file."""
-        if app.pargs.file:
-            with open(app.pargs.file, 'w') as configfile:
-                app.config.write(configfile)
+    @expose(help="Start one or mode workers in this node")
+    def start(self):
+        """Start one or mode workers in this nodee."""
+        if app.pargs.workers:
+            workers = int(app.pargs.workers)
         else:
-            out = StringIO()
-            app.config.write(out)
-            out.read()
-            print(out.buf)
+            workers = 1
+
+        app.log.info('Start node with %s workers' % workers)
+
+    @expose(help="Stop all workers")
+    def stop(self):
+        """Start one or mode workers in this nodee."""
+        if app.pargs.workers:
+            workers = int(app.pargs.workers)
+        else:
+            workers = 1
+
+        app.log.info('Start node with %s workers' % workers)
+
 
 
 
@@ -116,7 +135,7 @@ class SwarmForce(CementApp):
         ]
 
         base_controller = 'base'
-        handlers = [DefaultController, MonitorController]
+        handlers = [DefaultController, MonitorController, ShowController]
 
 
 
