@@ -8,6 +8,9 @@ import time
 from random import choice, randint
 alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWYZ0123456789_'
 
+# -----------------------------------------
+# Random generator data
+# -----------------------------------------
 def random_token(length=10, minimum=3):
     "Generate a random token"
     token = []
@@ -28,6 +31,9 @@ def random_path(length=10, minimum=3, sep='/', lead=True):
 
     return sep.join(path)
 
+# -----------------------------------------
+# Hashing convenience functions
+# -----------------------------------------
 def hasher(footprint):
     "hasher used for all objects in project"
     sha1 = hashlib.sha1()
@@ -35,6 +41,9 @@ def hasher(footprint):
     # return int(sha1.hexdigest(), 16)
     return sha1.hexdigest()
 
+# -----------------------------------------
+# Debugging convenience functions
+# -----------------------------------------
 def until(condition, timeout=5):
     "Wait until condition is true"
     frame = sys._getframe().f_back
@@ -51,3 +60,13 @@ def until(condition, timeout=5):
         raise RuntimeError(
             'Timeout (%s) while waiting for condition %s' % \
         (timeout, condition))
+
+# -----------------------------------------
+# Some convenience functions
+# -----------------------------------------
+def expath(*path):
+    "Join several paths and expand against user and ENV subtitution"
+    return os.path.abspath(
+        os.path.expanduser(
+            os.path.expandvars(
+            os.path.join(*path))))

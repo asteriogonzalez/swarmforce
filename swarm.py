@@ -3,12 +3,19 @@
 import hashlib
 import re
 import time
+import os
+import shutil
+import psutil
+import time
+
 from threading import Thread
+from collections import namedtuple
 from swarmforce.loggers import getLogger
 from swarmforce.http import Request, Response, \
      X_CLIENT, X_REQ_ID, X_TIME, X_TIMEOUT, X_REMAIN_EXECUTIONS
-from swarmforce.misc import hasher, until
+from swarmforce.misc import hasher, until, expath
 
+# log = getLogger(__name__)
 log = getLogger('swarmforce')
 
 
@@ -277,6 +284,97 @@ class Worker(object):
         """Add callbacks based on a reg expression with responses return code."""
         self.response_callbacks.append(
             (re.compile(regexp, re.I | re.DOTALL), func))
+
+
+
+
+WorkerStatus = namedtuple('WorkerStatus', ['pid', 'timeout', 'active'])
+
+def active(status):
+    return dict((key, value) for (key, value) in status.items() if value.active)
+
+def dead(status):
+    return dict((key, value) for (key, value) in status.items() if not value.active)
+
+
+class Layout(dict):
+    def __init__(self, root, nodeid, workerid, **kw):
+        dict.__init__(self, **kw)
+
+        self.root = root
+        self.nodeid = nodeid
+        self.workerid = workerid
+        self.pid_file = None
+
+    def setup(self):
+        node_home = self['node_home'] = expath(self.root, self.nodeid)
+        node_inbox = self['node_inbox'] = expath(node_home, 'inbox')
+
+        home = self['home'] = expath(node_home, self.workerid)
+        inbox = self['inbox'] = expath(home, 'inbox')
+
+        self['pid_file'] = expath(home, 'worker.pid')
+
+        for key, path in self.items():
+            if '.' in os.path.basename(path):  # ignore regular files
+                continue
+
+            if not os.path.exists(path):
+                print('Creating: %8s folder: %s' % (key, path))
+                os.makedirs(path)
+
+    def update_pid_file(self):
+        """Stamp pid and time info in pid_file."""
+        info = '%s %s' % (os.getpid(), time.time())
+        file(self['pid_file'], 'wt').write(info)
+
+
+    def get_worker_status(self):
+        status = {}
+        for root, folders, files in os.walk(self['node_home']):
+            for name in files:
+                if name in ('worker.pid'):
+                    path = os.path.join(root, name)
+                    try:
+                        pid, timeout = file(path, 'rt').read().split()
+                        pid, timeout = int(pid), float(timeout)
+                        running = psutil.pid_exists(pid)
+
+                        workerid = os.path.basename(root)
+                        status[workerid] = WorkerStatus(pid, timeout, running)
+
+                    except Exception, why:
+                        print(why)
+        return status
+
+    def clean_dead(self):
+        died = dead(self.get_worker_status())
+        try:
+            for workerid in died:
+                home = expath(self['node_home'], workerid, )
+                inbox = expath(home, 'inbox')
+                for root, folders, files in os.walk(inbox):
+                    print root
+                    for name in files:
+                        os.rename(expath(root, name),
+                                  expath(self['node_inbox'], name))
+
+                shutil.rmtree(home)
+
+
+
+        except Exception, why:
+            print why
+
+
+
+
+
+
+
+
+
+
 
 
 # End
