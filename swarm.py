@@ -291,11 +291,18 @@ class Worker(object):
 WorkerStatus = namedtuple('WorkerStatus', ['pid', 'timeout', 'active'])
 
 def active(status):
-    return dict((key, value) for (key, value) in status.items() if value.active)
+    now = time.time()
+    return dict(
+        (key, value) for (key, value) in status.items()
+        if value.active and now - value.timeout < 3600 * 0.5
+    )
 
 def dead(status):
-    return dict((key, value) for (key, value) in status.items() if not value.active)
-
+    now = time.time()
+    return dict(
+        (key, value) for (key, value) in status.items()
+        if not (value.active and now - value.timeout < 3600 * 0.5)
+    )
 
 class Layout(dict):
     def __init__(self, root, nodeid, workerid, **kw):
@@ -354,7 +361,6 @@ class Layout(dict):
                 home = expath(self['node_home'], workerid, )
                 inbox = expath(home, 'inbox')
                 for root, folders, files in os.walk(inbox):
-                    print root
                     for name in files:
                         os.rename(expath(root, name),
                                   expath(self['node_inbox'], name))

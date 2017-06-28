@@ -219,14 +219,9 @@ def main():
 
             try:
                 for i in xrange(100):
-                    app.log.info(i)
-                    status = app.layout.get_worker_status()
-                    print "Actives:"
-                    pprint(active(status))
-                    print "Dead:"
-                    pprint(dead(status))
+                    print(i)
 
-                    time.sleep(1)
+                    time.sleep(5)
                     if random.random() < 0.5:
                         app.layout.clean_dead()
 
