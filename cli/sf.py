@@ -26,6 +26,9 @@ from monitor import MonitorController, FileSystemMonitor
 from show import ShowController
 from swarmforce.misc import expath
 from swarmforce.swarm import Layout, active, dead
+from swarmforce.loggers import getLogger
+
+log = getLogger('swarmforce')
 
 # define our default configuration options
 defaults = init_defaults('swarmforce', 'log.logging')
@@ -73,8 +76,9 @@ def my_setup_hook(app):
     layout.setup()
     layout.update_pid_file()
 
-
-
+    # replace logger
+    # app.log = log
+    #app.log.error('TEST')
 
     # create the folder of pid_file
     # pid_file = app.config.get('daemon', 'pid_file')
@@ -218,12 +222,21 @@ def main():
             app.daemonize()
 
             try:
+                killtimeout = app.config.get('swarmforce', 'killtimeout')
+                killtimeout = killtimeout and float(killtimeout)
+                now = time.time()
                 for i in xrange(100):
                     print(i)
 
-                    time.sleep(5)
+                    time.sleep(1)
                     if random.random() < 0.5:
                         app.layout.clean_dead()
+
+                    if killtimeout and \
+                       time.time() > now + killtimeout:
+                        print "-Timeout-"
+                        break
+
 
             except CaughtSignal as e:
                 print(e)

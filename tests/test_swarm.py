@@ -1,54 +1,24 @@
 """Test swarm abtraction module"""
 import time
+import os
 import hashlib
 import pytest
+import subprocess
+
+from swarmforce.misc import expath
 from swarmforce.swarm import World, Worker, \
      MAX_HASH, hash_range, RUNNING, PAUSED
 from swarmforce.http import Event, Request, Response, \
      X_TIME, X_REMAIN_EXECUTIONS
 from swarmforce.misc import until
-from swarmforce.loggers import getLogger
+from demo_workers import Boss, EvalWorker
+from swarmforce.loggers import getLogger, setup_logging
 
+from loganalizer.main import get_files_fmt, MultiParser
+
+
+log_configfile = setup_logging('test_logging.yaml')
 log = getLogger('swarmforce')
-
-
-class Boss(Worker):
-    "A client agent"
-
-    def __init__(self):
-        Worker.__init__(self)
-        self.add_response_handler('2\d\d$', self.response_OK)
-        self.hits = 0
-
-    def response_OK(self, response):
-        request = response.request
-        log.info('%s ---> %s', request.body, response.body)
-        self.response = response.body
-        self.hits += 1
-        log.info('hits: %s', self.hits)
-
-
-class Calc(Worker):
-    "A server agent"
-
-    def dispatch_request(self, event):
-        result = eval(event.body)
-        answer = event.answer()
-        answer.body = unicode(result)
-        log.info(answer.dump())
-
-
-@pytest.fixture(scope="function")
-def world(request):
-    "Provide a world that is not shared across all tests"
-    world = World()
-    world.start()
-
-    def fin():
-        world.stop()
-
-    request.addfinalizer(fin)
-    return world
 
 
 def test_hash_reallocation():
@@ -109,13 +79,13 @@ def test_swarm_calc(world):
     "Simple client / server pattern"
 
     client = world.new(Boss)
-    worker = world.new(Calc)
-    worker.listen('DO /inbox/calc')
+    worker = world.new(EvalWorker)
+    worker.listen('DO /inbox/eval')
 
     # match
     req = client.new_request()
     req.method = 'DO'
-    req.path = '/inbox/calc'
+    req.path = '/inbox/eval'
     req.body = '1 + 2'
     client.send(req)
 
@@ -125,13 +95,13 @@ def test_swarm_calc(world):
 def test_deferred_requests(world):
     """test timeout and deferred responses"""
     client = world.new(Boss)
-    worker = world.new(Calc)
-    worker.listen('DO /inbox/calc')
+    worker = world.new(EvalWorker)
+    worker.listen('DO /inbox/eval')
 
     now = time.time()
     req = client.new_request()
     req.method = 'DO'
-    req.path = '/inbox/calc'
+    req.path = '/inbox/eval'
     req.body = '1 + 2'
     req[X_TIME] = now + 1
     client.send(req)
@@ -144,29 +114,32 @@ def test_deferred_requests(world):
 def test_remain_executions(world):
     """test remain executions for a requests"""
 
+    global log_configfile
+
     client = world.new(Boss)
-    worker = world.new(Calc)
-    worker.listen('DO /inbox/calc')
+    worker = world.new(EvalWorker)
+    worker.listen('DO /inbox/eval')
 
     N = 3
     req = client.new_request()
     req.method = 'DO'
-    req.path = '/inbox/calc'
+    req.path = '/inbox/eval'
     req.body = '1 + 2'
     req[X_REMAIN_EXECUTIONS] = N
     client.send(req)
 
     until("client.hits == N")
 
+    print "-" * 100
+    print log_configfile
 
-def test_connect_swarm(world):
-    """# TODO: USER HISTORY 'connect to swarm'
-    # 1. from console, launch swarm node
-    # 2. view swarm status
-    # 3. launch some calc workers that stay idle
-    # 4. create 100 requets and let the swarm process them
-    # 5. query for stats
-"""
+    formatters = get_files_fmt(log_configfile)
+    # parser = MultiParser(formatters)
+    parser = MultiParser(formatters, database='logs.sqlite')
+    parser.parse_all()
+
+    foo = 12
+
 
 
 # End
