@@ -2,11 +2,12 @@ version: 1
 disable_existing_loggers: False
 formatters:
     complex:
-        format: "%(asctime)s [%(process)d] %(name)10s %(levelname)7s %(funcName)9s() - %(message)s"
+        # format: "%(asctime)s [%(process)d] %(name)10s %(levelname)7s %(funcName)9s() - %(message)s"
+        format: "%(relativeCreated)s [%(process)d] %(name)10s %(levelname)7s %(funcName)9s() - %(message)s"
         datefmt: '%H:%M:%S'
 
     simple:
-        format: '%(levelname)s %(message)s'
+        format: '%(relativeCreated)s %(levelname)s %(message)s'
         datefmt: '%d/%m/%Y %H:%M:%S'
 
 
@@ -18,7 +19,7 @@ handlers:
         stream: ext://sys.stdout
 
     log_file_handler:
-        #class: logging.FileHandler
+        # class: logging.FileHandler
         class: logging.handlers.RotatingFileHandler
         level: INFO
         formatter: complex

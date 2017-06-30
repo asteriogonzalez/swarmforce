@@ -3,8 +3,8 @@ from swarmforce.swarm import World, Worker, \
      MAX_HASH, hash_range, RUNNING, PAUSED
 
 from swarmforce.loggers import getLogger
-
 log = getLogger('swarmforce')
+
 
 class Boss(Worker):
     "A client agent"
@@ -20,7 +20,6 @@ class Boss(Worker):
         self.response = response.body
         self.hits += 1
         log.info('hits: %s', self.hits)
-        log.info('a ver que pasa?')
 
 
 class EvalWorker(Worker):
@@ -32,4 +31,4 @@ class EvalWorker(Worker):
         answer.body = unicode(result)
         log.info(answer.dump())
 
-
+# End

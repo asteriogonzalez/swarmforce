@@ -2,8 +2,8 @@
 import time
 import os
 import hashlib
-import pytest
 import subprocess
+import pytest
 
 from swarmforce.misc import expath
 from swarmforce.swarm import World, Worker, \
@@ -11,7 +11,7 @@ from swarmforce.swarm import World, Worker, \
 from swarmforce.http import Event, Request, Response, \
      X_TIME, X_REMAIN_EXECUTIONS
 from swarmforce.misc import until
-from demo_workers import Boss, EvalWorker
+from swarmforce.tests.demo_workers import Boss, EvalWorker
 from swarmforce.loggers import getLogger, setup_logging
 
 from loganalizer.main import get_files_fmt, MultiParser
@@ -111,7 +111,7 @@ def test_deferred_requests(world):
     until("client.response == '3'")
 
 
-def test_remain_executions(world):
+def test_remain_executions(world, clean_logs):
     """test remain executions for a requests"""
 
     global log_configfile
@@ -134,14 +134,14 @@ def test_remain_executions(world):
     # Checking N hits directly from logs analysis
     formatters = get_files_fmt(log_configfile)
 
-    #parser = MultiParser(formatters, database='logs.sqlite')
-    parser = MultiParser(formatters)
+    parser = MultiParser(formatters, database='logs.sqlite')
+    #parser = MultiParser(formatters)
     parser.parse_all()
 
     info = parser.assert_on(funcname='answer', message='Creat.*response')
     # assert len(info) == N
 
-    foo = 11
+    foo = 122
 
 
 

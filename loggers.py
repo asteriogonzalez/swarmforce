@@ -22,15 +22,16 @@ def setup_logging(path='logging.yaml', level=logging.INFO, env_key='LOGGING_CFG'
 
             config = yaml.safe_load(content)
 
+        create_parent_folders(config)
         logging.config.dictConfig(config)
         log_configfile = os.path.abspath(path)
 
     else:
         logging.basicConfig(level=level)
 
-    print "=" * 10
-    print "Used log_configfile = ", log_configfile
-    print "=" * 10
+    # print "=" * 10
+    # print "Used log_configfile = ", log_configfile
+    # print "=" * 10
 
     return log_configfile
 
@@ -51,6 +52,21 @@ def flush():
     for handler in logging._handlers.values():
         # print "FLUSHING", handler
         handler.flush()
+
+
+
+def create_parent_folders(config):
+    for name, handler in config['handlers'].items():
+        filename = handler.get('filename')
+        if filename:
+            parent = os.path.dirname(filename)
+            if not os.path.exists(parent):
+                os.makedirs(parent)
+
+def reset_logs():
+    for handler in logging._handlers.values():
+        if isinstance(handler, logging.FileHandler):
+            file(handler.baseFilename, 'w').write('')
 
 
 # Main default setup

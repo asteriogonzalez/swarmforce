@@ -5,11 +5,12 @@ import re
 import time
 import os
 import shutil
-import psutil
-import time
 
 from threading import Thread
 from collections import namedtuple
+
+import psutil
+
 from swarmforce.loggers import getLogger
 from swarmforce.http import Request, Response, \
      X_CLIENT, X_REQ_ID, X_TIME, X_TIMEOUT, X_REMAIN_EXECUTIONS
@@ -134,7 +135,7 @@ class World(Thread):
                 self.idle()
         else:
             log.info('%s is PAUSED', self)
-            time.sleep(0.2)
+            time.sleep(self.relax)
 
     def idle(self):
         """Performs an idle task. Should be overrrided."""
@@ -291,6 +292,7 @@ class Worker(object):
 WorkerStatus = namedtuple('WorkerStatus', ['pid', 'timeout', 'active'])
 
 def active(status):
+    "Show active workers"
     now = time.time()
     return dict(
         (key, value) for (key, value) in status.items()
@@ -298,6 +300,8 @@ def active(status):
     )
 
 def dead(status):
+    "Show dead workers"
+
     now = time.time()
     return dict(
         (key, value) for (key, value) in status.items()
@@ -305,6 +309,15 @@ def dead(status):
     )
 
 class Layout(dict):
+    """Manage working directory layout, in particular:
+
+    - create the 'home' of the worker
+    - create the inbox' associated with worker
+    - write the pid file of worker
+    - update the heatbeat of pid file info
+    - determne the status of all know workers
+    - clean dead workers are move back any orphan request
+    """
     def __init__(self, root, nodeid, workerid, **kw):
         dict.__init__(self, **kw)
 
@@ -314,6 +327,7 @@ class Layout(dict):
         self.pid_file = None
 
     def setup(self):
+        "create the initial worker setup"
         node_home = self['node_home'] = expath(self.root, self.nodeid)
         node_inbox = self['node_inbox'] = expath(node_home, 'inbox')
 
@@ -327,7 +341,7 @@ class Layout(dict):
                 continue
 
             if not os.path.exists(path):
-                print('Creating: %8s folder: %s' % (key, path))
+                # print('Creating: %8s folder: %s' % (key, path))
                 os.makedirs(path)
 
     def update_pid_file(self):
@@ -335,12 +349,12 @@ class Layout(dict):
         info = '%s %s' % (os.getpid(), time.time())
         file(self['pid_file'], 'wt').write(info)
 
-
     def get_worker_status(self):
+        "return all know worker status"
         status = {}
         for root, folders, files in os.walk(self['node_home']):
             for name in files:
-                if name in ('worker.pid'):
+                if name in ('worker.pid', ):
                     path = os.path.join(root, name)
                     try:
                         pid, timeout = file(path, 'rt').read().split()
@@ -351,10 +365,11 @@ class Layout(dict):
                         status[workerid] = WorkerStatus(pid, timeout, running)
 
                     except Exception, why:
-                        print(why)
+                        print why
         return status
 
     def clean_dead(self):
+        "clean dead workers directories"
         died = dead(self.get_worker_status())
         try:
             for workerid in died:
@@ -366,8 +381,6 @@ class Layout(dict):
                                   expath(self['node_inbox'], name))
 
                 shutil.rmtree(home)
-
-
 
         except Exception, why:
             print why

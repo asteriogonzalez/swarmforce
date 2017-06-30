@@ -19,12 +19,12 @@ def test_subprocess_inherance():
     filename = os.path.abspath(__file__)
     p = subprocess.Popen(['python', filename])
     p.wait()
-    print "Parent End"
+    # print "Parent End"
     fo = 1
 
 
 def main():
-    print "Child $FOO = %s" % (os.environ.get('FOO'))
+    # print "Child $FOO = %s" % (os.environ.get('FOO'))
     assert os.environ.get('FOO') == 'foo'
 
 if __name__ == '__main__':

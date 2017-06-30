@@ -12,13 +12,17 @@ from swarmforce.http import Event, Request, Response, \
      X_TIME, X_REMAIN_EXECUTIONS
 from swarmforce.misc import until
 from demo_workers import Boss, EvalWorker
-from swarmforce.loggers import getLogger
+from swarmforce.loggers import getLogger, setup_logging
+
+from loganalizer.main import get_files_fmt, MultiParser
+
 
 # os.environ['LOGGING_CFG'] = expath('test_logging.yaml')
+log_configfile = setup_logging('test_logging.yaml')
 log = getLogger('swarmforce')
 
 
-def test_connect_swarm(world, log_now):
+def test_connect_swarm(clean_logs,  world, log_now):
     """# TODO: USER HISTORY 'connect to swarm'
     # 1. from console, launch swarm node
     # 2. view swarm status
@@ -46,10 +50,19 @@ def test_connect_swarm(world, log_now):
         log.info('Waiting for subprocess to end ...')
     p.wait()
 
+    #
+    # Checking N hits directly from logs analysis
+    formatters = get_files_fmt(log_configfile)
+
+    parser = MultiParser(formatters, database='logs.sqlite')
+    # parser = MultiParser(formatters)
+    parser.parse_all()
+
+    # info = parser.assert_on(funcname='answer', message='Creat.*response')
+    # assert len(info) == N
+
     log.info('Done ...')
-
-    foo = 12
-
+    foo = 1
 
 
 # End

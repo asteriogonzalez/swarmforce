@@ -31,9 +31,9 @@ from swarmforce.loggers import getLogger, log_configfile
 os.chdir(os.environ.get('SF_HOME', '.'))
 
 log = getLogger('swarmforce')
-print "="* 50
-print "log_configfile", log_configfile
-print "="* 50
+# print "="* 50
+# print "log_configfile", log_configfile
+# print "="* 50
 
 
 # define our default configuration options
@@ -220,22 +220,16 @@ def main():
     "Main entry point of application"
     global app
 
-    print('LOGGING_CFG[pid [%s] = %s'% (os.getpid(), os.environ.get('LOGGING_CFG')) )
+    # print('LOGGING_CFG[pid [%s] = %s'% (os.getpid(), os.environ.get('LOGGING_CFG')) )
     log.info('>>> LOGGING_CFG[pid [%s] = %s', os.getpid(), os.environ.get('LOGGING_CFG') )
 
-
-    log.info('KA'*20)
 
     with SwarmForce() as app:
         try:
             hook.register('signal', my_signal_handler)
             app.run()
 
-            log.info('BA'*20)
-
             app.daemonize()
-
-            app.log.info('DONDE '*4)
 
             try:
                 killtimeout = app.config.get('swarmforce', 'killtimeout')
@@ -244,7 +238,7 @@ def main():
                 for i in xrange(100):
                     log.info('pid[%s] loop: %s' % (os.getpid(), i))
 
-                    print 'print: pid[%s] loop: %s' % (os.getpid(), i)
+                    # print 'print: pid[%s] loop: %s' % (os.getpid(), i)
                     time.sleep(1)
                     if random.random() < 0.5:
                         app.layout.clean_dead()
