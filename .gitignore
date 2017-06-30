@@ -7,4 +7,5 @@ htmlcov
 *.wpu
 *.log
 .DS_Store
+*.sqlite
 
