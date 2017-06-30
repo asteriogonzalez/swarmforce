@@ -130,15 +130,18 @@ def test_remain_executions(world):
 
     until("client.hits == N")
 
-    print "-" * 100
-    print log_configfile
-
+    #
+    # Checking N hits directly from logs analysis
     formatters = get_files_fmt(log_configfile)
-    # parser = MultiParser(formatters)
-    parser = MultiParser(formatters, database='logs.sqlite')
+
+    #parser = MultiParser(formatters, database='logs.sqlite')
+    parser = MultiParser(formatters)
     parser.parse_all()
 
-    foo = 12
+    info = parser.assert_on(funcname='answer', message='Creat.*response')
+    # assert len(info) == N
+
+    foo = 11
 
 
 

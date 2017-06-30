@@ -2,7 +2,7 @@ version: 1
 disable_existing_loggers: False
 formatters:
     complex:
-        format: "%(asctime)s %(name)10s %(levelname)7s %(funcName)9s() - %(message)s"
+        format: "%(asctime)s [%(process)d] %(name)10s %(levelname)7s %(funcName)9s() - %(message)s"
         datefmt: '%H:%M:%S'
 
     simple:
@@ -18,21 +18,21 @@ handlers:
         stream: ext://sys.stdout
 
     log_file_handler:
-        class: logging.FileHandler
-        # class: logging.handlers.RotatingFileHandler
+        #class: logging.FileHandler
+        class: logging.handlers.RotatingFileHandler
         level: INFO
         formatter: complex
-        filename: system.log
+        filename: ${SF_HOME}/logs/system.log
         encoding: utf8
-        mode: w
-        # maxBytes: 10485760 # 10MB
-        # backupCount: 20
+        mode: a
+        maxBytes: 10485760 # 10MB
+        backupCount: 20
 
     info_file_handler:
         class: logging.handlers.RotatingFileHandler
         level: INFO
         formatter: simple
-        filename: info.log
+        filename: ${SF_HOME}/logs/info.log
         maxBytes: 10485760 # 10MB
         backupCount: 20
         encoding: utf8
@@ -41,7 +41,7 @@ handlers:
         class: logging.handlers.RotatingFileHandler
         level: ERROR
         formatter: simple
-        filename: errors.log
+        filename: ${SF_HOME}/logs/error.log
         maxBytes: 10485760 # 10MB
         backupCount: 20
         encoding: utf8

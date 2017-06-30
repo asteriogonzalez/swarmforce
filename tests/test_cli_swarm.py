@@ -14,11 +14,11 @@ from swarmforce.misc import until
 from demo_workers import Boss, EvalWorker
 from swarmforce.loggers import getLogger
 
+# os.environ['LOGGING_CFG'] = expath('test_logging.yaml')
 log = getLogger('swarmforce')
 
 
-
-def test_connect_swarm(world):
+def test_connect_swarm(world, log_now):
     """# TODO: USER HISTORY 'connect to swarm'
     # 1. from console, launch swarm node
     # 2. view swarm status
@@ -26,22 +26,29 @@ def test_connect_swarm(world):
     # 4. create 100 requets and let the swarm process them
     # 5. query for stats
 """
+
+    global log_configfile
+    print "log_now=", log_now
+
     args = ['sf.py']
     cwd = expath(os.path.dirname(__file__), '../cli')
     log.warn(cwd)
 
     cmd = './sf.py'
 
-    log.info('Launching ... %s' % cmd)
+    log.info('Launching ... %s', cmd)
 
     for i in xrange(2):
-        p = subprocess.Popen(cmd, cwd=cwd)
+        p = subprocess.Popen(cmd, cwd=cwd, env=os.environ)
+        log.info("SUBPROCESS PID = %s", p.pid)
+        # p = subprocess.Popen(cmd, cwd=cwd)
 
-        log.info('Waiting ...')
+        log.info('Waiting for subprocess to end ...')
     p.wait()
 
     log.info('Done ...')
-    foo = 1233
+
+    foo = 12
 
 
 

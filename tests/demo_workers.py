@@ -20,6 +20,7 @@ class Boss(Worker):
         self.response = response.body
         self.hits += 1
         log.info('hits: %s', self.hits)
+        log.info('a ver que pasa?')
 
 
 class EvalWorker(Worker):
